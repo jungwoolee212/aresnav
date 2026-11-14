@@ -274,7 +274,7 @@ export function checkKo(t) {
   if ((m = t.match(/^(\d+)% of the route in terrain shadow$/))) return `경로의 ${m[1]}퍼센트가 지형 그늘`;
   if (t === "Sunlit the whole way") return "전 구간 햇빛";
   if ((m = t.match(/^Radiation shielding: sky (\d+)% open on average$/))) return `방사선 차폐: 하늘 평균 ${m[1]}퍼센트 개방`;
-  if ((m = t.match(/^Reconnaissance only: (\d+) m terrain$/))) return `정찰용 전용, ${m[1]}미터 해상도 지형`;
+  if ((m = t.match(/^Rough guide only: (\d+) m terrain can't show small cliffs or rocks$/))) return `대략적인 길만 안내: ${m[1]}미터 간격 지형이라 작은 절벽·바위가 안 보임`;
   if (t === "Rock density not assessed") return "바위 밀도 미평가";
   if (t === "Point moved to usable ground") return "지점을 이동 가능한 땅으로 옮김";
   return t;

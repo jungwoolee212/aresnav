@@ -427,7 +427,8 @@ async function prepareAndPlan(id) {
     if (!site) return fail(`Couldn't load terrain from NASA Mars Trek${lastErr ? ` (${lastErr.message})` : ""}. Check the connection and try again.`);
     site.detail = detail;
     setSite(site);
-    if (site.lowRes) toast(`Only ${Math.round(site.cell_m)} m terrain is available for this route: fine for reconnaissance, not an EVA safety check.`, 6000);
+    if (site.lowRes) toast(KOUI() ? `이 경로는 ${Math.round(site.cell_m)}m 간격의 거친 지형 데이터밖에 없어요. 큰 지형으로 대략적인 길은 보여 주지만, 수백 m보다 작은 절벽·턱·바위는 안 보이니 걸어도 안전한지 판단하는 데는 쓰지 마세요.`
+      : `Only coarse ${Math.round(site.cell_m)} m terrain exists for this route. It shows the general way, but cliffs, ledges and rocks smaller than a few hundred metres don't show up, so don't rely on it to judge whether the walk is safe.`, 8000);
   }
   for (const p of pts) if (p.unchecked) {
     const q = makePoint(p.lat, p.lon, p.name);
@@ -663,7 +664,7 @@ function assess(tr, A) {
   C.push({ lvl: "ok", title: `Radiation shielding: sky ${fmt(A.skyAvg * 100)}% open on average`,
     sub: sh ? `Most sheltered spot near the route: ${fmt(sh.sky * 100)}% sky open, ${sh.off ? `${fmt(sh.off)} m off the route` : "on the route"} at ${distTxt(sh.d)}. Use it if a solar particle event is called.` : "" });
   const site = S.site;
-  if (site.lowRes) C.unshift({ lvl: walk ? "bad" : "warn", title: `Reconnaissance only: ${fmt(site.cell_m)} m terrain`,
+  if (site.lowRes) C.unshift({ lvl: walk ? "bad" : "warn", title: `Rough guide only: ${fmt(site.cell_m)} m terrain can't show small cliffs or rocks`,
     sub: `No sharp elevation model covers this route, so it uses ${sourceLabel(site.source)}. Cliffs, scarps and boulder fields smaller than a few hundred metres don't show at this scale: not an EVA safety check.` });
   else if (site.live && !site.rock) C.push({ lvl: "warn", title: "Rock density not assessed", sub: "No HiRISE image mosaic covers this ground, so only slope is checked. Watch for boulders and ridges." });
   return C;
@@ -699,7 +700,7 @@ function renderDetail() {
   const src = site.live ? `${site.source.instrument || "MOLA+HRSC"} ${site.source.pxM < 10 ? site.source.pxM.toFixed(1) : Math.round(site.source.pxM)} m data` : "HiRISE 1 m DEM (prebuilt)";
   const canRefine = S.opts.detail !== "high" && (!site.live || site.cell_m > Math.max(4, Math.round(site.source.pxM)));
   const ko = KOUI(), srcK = ko ? src.replace(/ data$/, " 데이터").replace("(prebuilt)", "(사전 제작)") : src;
-  el.innerHTML = `<span class="det ${site.lowRes ? "low" : ""}">${ko ? "지형" : "Terrain"}: ${fmt(site.cell_m)} m ${ko ? "격자" : "grid"} · ${esc(srcK)}${site.lowRes ? (ko ? " · 정찰용 전용" : " · reconnaissance only") : ""}</span>${canRefine ? `<button class="link-btn" id="btnRefine" title="Re-analyse the ground along this route on a finer grid">${ko ? "경로 지형 정밀 분석" : "Refine route terrain"}</button>` : S.opts.detail === "high" ? `<button class="link-btn" id="btnStd">${ko ? "기본 정밀도" : "Standard detail"}</button>` : ""}`;
+  el.innerHTML = `<span class="det ${site.lowRes ? "low" : ""}">${ko ? "지형" : "Terrain"}: ${fmt(site.cell_m)} m ${ko ? "격자" : "grid"} · ${esc(srcK)}${site.lowRes ? (ko ? " · 대략적인 길만 (작은 절벽·바위 안 보임)" : " · rough guide only (small cliffs and rocks not shown)") : ""}</span>${canRefine ? `<button class="link-btn" id="btnRefine" title="Re-analyse the ground along this route on a finer grid">${ko ? "경로 지형 정밀 분석" : "Refine route terrain"}</button>` : S.opts.detail === "high" ? `<button class="link-btn" id="btnStd">${ko ? "기본 정밀도" : "Standard detail"}</button>` : ""}`;
   $("#btnRefine")?.addEventListener("click", () => { S.opts.detail = "high"; $("#inDetail").value = "high"; changed(); });
   $("#btnStd")?.addEventListener("click", () => { S.opts.detail = "standard"; $("#inDetail").value = "standard"; changed(); });
 }
