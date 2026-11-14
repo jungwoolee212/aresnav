@@ -105,10 +105,18 @@
           <span class="status-dot" id="statusDot"></span><span id="statusText">Checking…</span><span class="chev">▾</span>
         </button>
         <div class="checks hidden" id="checks"></div>
+        <div class="first-tip hidden" id="firstTip" role="note">
+          <span><b>Example route, ready to go.</b> Press <b>Start</b> for turn-by-turn guidance or <b>HUD</b> for the helmet view. To plan your own, tap <b>Clear</b> or tap the map.</span>
+          <button class="icon-btn" id="tipClose" aria-label="Dismiss tip">✕</button>
+        </div>
         <div class="actions">
           <button class="btn start" id="btnStart">
             <svg viewBox="0 0 24 24" width="20" height="20"><path d="M12 2 4 21l8-4 8 4z" fill="currentColor"/></svg>
             Start
+          </button>
+          <button class="btn hudbtn" id="btnHud" title="Start guidance in the helmet heads-up display">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 10a9 7 0 0 1 18 0v3a4 4 0 0 1-4 4h-1.5l-1.5-2h-4l-1.5 2H7a4 4 0 0 1-4-4z"/></svg>
+            HUD
           </button>
           <button class="btn" id="btnSteps">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="3.5" cy="6" r="1.2" fill="currentColor"/><circle cx="3.5" cy="12" r="1.2" fill="currentColor"/><circle cx="3.5" cy="18" r="1.2" fill="currentColor"/></svg>
@@ -119,6 +127,12 @@
             Report
           </button>
         </div>
+        <div class="sheet-tools">
+          <button class="link-btn" id="btnCompare" title="Plan the fastest, balanced and safest routes and compare them">⇆ Compare routes</button>
+          <button class="link-btn" id="btnSheetExport" title="Printable route sheet: save as PDF from the print dialog">⎙ Route sheet</button>
+          <button class="link-btn" id="btnGpx" title="Download the route as a GPX file">⤓ GPX</button>
+        </div>
+        <div class="alt-box hidden" id="altBox"></div>
         <div class="profile">
           <div class="profile-head"><span class="eyebrow">Elevation</span><span class="muted" id="profileInfo"></span></div>
           <svg id="profileSvg" preserveAspectRatio="none"></svg>
@@ -159,6 +173,10 @@
             <button class="btn hudbtn" id="navHud" title="Helmet heads-up display (H)">HUD</button>
             <button class="btn exit" id="navExit" title="End navigation (Esc)">End</button>
           </div>
+        </div>
+        <div class="nav-sos">
+          <button class="btn sos" id="navHome" title="Re-route from here back to the start">⌂ Return to start</button>
+          <button class="btn sos" id="navShelter" title="Re-route from here to the most sheltered spot nearby">⛨ Nearest shelter</button>
         </div>
         <input type="range" id="navScrub" min="0" max="1000" value="0" aria-label="Progress along the route" />
         <div class="sim-note">Simulated position. On Mars this would follow the suit's navigation fix (there's no GPS).</div>

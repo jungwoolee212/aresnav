@@ -7,7 +7,7 @@
 //    surroundings), kept between visits.
 // New places that were never loaded still need a connection.
 
-const VERSION = "2026-11-15b";                 // bump to ship a new app version
+const VERSION = "2026-11-15c";                 // bump to ship a new app version
 const SHELL = `marswalk-shell-${VERSION}`;     // app code: replaced on each version
 const LIBS = "marswalk-libs";                  // CDN libraries and fonts: pinned versions, kept
 const TREK = "marswalk-trek";                  // NASA Mars Trek tiles and elevation: kept across versions
@@ -15,7 +15,7 @@ const TREK_MAX = 6000;                         // oldest Trek entries are droppe
 
 const APP_FILES = [
   "./", "index.html", "css/app.css",
-  "js/app.js", "js/catalog.js", "js/hud.js", "js/map3d.js", "js/mission.js", "js/nav.js", "js/places.js", "js/planner.js",
+  "js/app.js", "js/catalog.js", "js/extras.js", "js/hud.js", "js/map3d.js", "js/mission.js", "js/nav.js", "js/places.js", "js/planner.js",
   "js/sun.js", "js/terrain-live.js", "js/terrain3d.js", "js/ui-ko.js", "js/voice-ko.js", "js/voice.js",
   "data/site.json", "data/elev.bin", "data/terrain.bin", "data/hazard.png", "data/rough.png", "data/slope.png",
 ];
