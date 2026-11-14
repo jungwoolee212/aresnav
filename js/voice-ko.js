@@ -85,6 +85,7 @@ function one(s) {
   const start = /(?:안내(?:\s*시작)?|출발하자|가자|데려|길\s*안내|바로\s*출발)/.test(s) && !/(?:경로|길|루트)\s*(?:만\s*)?(?:찾|계획|짜|알려|보여|만들)/.test(s);
 
   // ---- questions and commands that contain route-like words: settle these first ----
+  if (/산소|o2|O2|오투/.test(s) && /어떻게\s*(?:계산|정해|구해|알아|나와|나오|돼)|계산|계획|기준|예상치|추정|원리|어디서\s*나와/.test(s)) return "how is oxygen calculated";
   if ((m = s.match(/^(?:지도|맵)\s*(?:에서|에|상에서)\s*(.+?)\s*(?:을|를|이|가)?\s*(?:찾아|보여|어디)/))) return `show me ${koPlace(m[1])}`;
   if (/해\s*지기\s*전|어두워지기\s*전|일몰\s*전|밤\s*(?:되기|오기|이\s*되기)\s*전|해\s*(?:가\s*)?(?:떠|떴)|해\s*(?:가\s*)?(?:언제|몇\s*시(?:에)?)\s*(?:떠|뜨)|^(?:지금\s*)?해\s*(?:가\s*)?(?:있|보여)/.test(s)) return "is the sun up";
   if (/^여기\s*(?:가|는)?\s*어디/.test(s)) return "where am i";
@@ -374,6 +375,10 @@ const RULES = [
   [/^There's no real shelter near here: the terrain blocks only (.+) of the sky where you are, and no reachable spot within 6 kilometres blocks much more$/, "근처에 쓸 만한 대피처가 없습니다. 지금 위치는 지형이 하늘의 $1만 가리고, 6킬로미터 안에 갈 수 있는 곳 중 훨씬 더 가려진 곳이 없습니다"],
   [/^(.+) is (.+) kilometres away: too far for a surface traverse \(this planner goes up to 1,500 km\)$/, "$1까지 $2킬로미터: 지표 이동으로는 너무 멉니다(최대 1,500킬로미터)"],
   [/^I moved the map there$/, "지도를 그곳으로 옮겼습니다"],
+  [/^Oxygen here is a planning estimate, not a sensor reading$/, "여기 산소는 센서 값이 아니라 계획용 예상치입니다"],
+  [/^The suit is assumed to last (.+?) hours at a steady rate, with (.+?) hours? kept in reserve$/, "우주복 산소는 일정하게 줄어 $1시간 간다고 가정하고, 그중 $2시간은 비상용으로 남깁니다"],
+  [/^At every point, the time already out plus the time to walk back to (?:the start|출발지) must fit in what's left$/, "경로의 모든 지점에서, 지금까지 쓴 시간과 출발지까지 걸어 돌아가는 시간을 더한 값이 남은 산소 안에 들어와야 합니다"],
+  [/^The route report's Oxygen plan shows this along the whole route$/, "경로 보고서의 '산소 계획'에서 경로 전체를 볼 수 있습니다"],
   [/^No connection, and the terrain for this area isn't saved on this device yet$/, "연결이 없고, 이 지역 지형은 아직 이 기기에 저장되지 않았습니다"],
   [/^Routes and places already loaded still work offline; connect once to plan here$/, "이미 불러온 경로와 장소는 오프라인에서도 됩니다. 여기서 경로를 짜려면 한 번 연결해 주세요"],
   [/^Check the connection and try again$/, "연결을 확인하고 다시 시도하세요"],

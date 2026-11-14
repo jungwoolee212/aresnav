@@ -643,7 +643,14 @@ async function savePlace(what, name) {
 }
 
 // ---------- answers ----------
+// how the oxygen numbers are worked out (asked while planning or during guidance)
+const O2_HOW = /how (is|are|do you|does it|did you)?.*(oxygen|o2).*(calculat|work|estimat|plan|decid|determin|comput|figure)|oxygen (plan|model|calculation|estimate)|where does the oxygen/;
+function o2How() {
+  const o = C.S.opts, r = o.reserveHours;
+  return `Oxygen here is a planning estimate, not a sensor reading. The suit is assumed to last ${o.plssHours} hours at a steady rate, with ${r} hour${r === 1 ? "" : "s"} kept in reserve. At every point, the time already out plus the time to walk back to the start must fit in what's left. The route report's Oxygen plan shows this along the whole route.`;
+}
 function planAnswer(q) {
+  if (O2_HOW.test(q)) return o2How();
   if (has(q, /\b(highest|lowest|summit)\b/)) {
     const p = extreme(has(q, /lowest/) ? -1 : +1);
     return p.error || `The ${p.name.replace(/ \(.*/, "").toLowerCase()} in the analysed area is at ${Math.round(C.S.site.elev[cellOf(C.S.site, p.lat, p.lon)])} metres. Say take me to the ${has(q, /lowest/) ? "lowest" : "highest"} point to plan a route there.`;
@@ -672,6 +679,7 @@ function answer(q, Lv) {
   };
   const remain = () => Lv.done ? "You've arrived." : `${spokenDist(Lv.remainDist)} to go, about ${spokenDur(Lv.remainTime)}. You'll arrive around ${hhmm(Lv.arrive)} local time.`;
 
+  if (O2_HOW.test(q)) return o2How();
   if (has(q, /oxygen|\bo2\b|\bair\b|plss|life support|suit|breath|consumables/)) return o2();
   if (has(q, /turn back|go back|walk back|head (back|home)|return|abort/)) {
     if (!Lv.walk) return `Driving back from here takes about ${spokenDur(Lv.back)}. Say take me back to base to re-route.`;

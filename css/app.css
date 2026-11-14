@@ -402,3 +402,11 @@ body.navigating .fit-ctl { display: none; }
 .leg-pick { display: flex; gap: 8px; margin-top: 8px; align-items: center; }
 .leg-pick select { flex: 1; min-width: 0; background: var(--card2); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font-size: 12px; }
 @media (max-width: 760px) { .fit-ctl { display: none; } }
+
+/* oxygen plan table in the route report */
+.o2-table { width: 100%; border-collapse: collapse; font-size: 12px; margin: 8px 0 6px; font-variant-numeric: tabular-nums; }
+.o2-table th { text-align: left; font-weight: 600; color: var(--muted, #a7adb8); padding: 4px 4px; border-bottom: 1px solid rgba(255,255,255,.12); }
+.o2-table td { padding: 4px 4px; border-bottom: 1px solid rgba(255,255,255,.06); white-space: nowrap; }
+.o2-table td:first-child { white-space: normal; }
+.o2-table tr.tight td { background: rgba(245,200,75,.08); }
+.o2-table td.warn { color: #f5c84b; } .o2-table td.bad { color: #ff7083; }

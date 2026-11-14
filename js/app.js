@@ -880,6 +880,36 @@ function openDrawer(name) {
 function closeDrawer() { const dr = $("#drawer"); dr.classList.remove("open"); dr.setAttribute("aria-hidden", "true"); }
 function flyToIdx(i, zoom = 17.5) { const p = S.track.pts[i]; map.flyTo([p.lat, p.lon], Math.max(map.getZoom(), zoom)); showHover(p.lat, p.lon); if (innerWidth <= 760) closeDrawer(); }
 
+// Oxygen plan: the same walk-back model the safety check uses, shown along the whole route so the crew can see
+// where the margin is smallest. It is a planning estimate (steady use over the suit's rated time), not a sensor reading.
+function oxygenCard(tr, A) {
+  const o = S.opts, ko = KOUI(), pts = tr.pts;
+  if (tr.kind !== "walk") return `<div class="card"><div class="eyebrow">${ko ? "산소 계획" : "Oxygen plan"}</div><p class="small">${ko
+    ? "로버 이동이라 우주복 산소를 쓰지 않아요. 로버 생명유지장치는 이 앱에서 계산하지 않습니다."
+    : "Rover traverse: suit oxygen isn't drawn, and the rover's cabin life support isn't modelled here."}</p></div>`;
+  const usable = (o.plssHours - o.reserveHours) * 3600, D = (s) => (ko ? navKo.dur(s) : dur(s));
+  const margin = (i) => usable - pts[i].t - A.back[i];
+  let minI = 0; pts.forEach((_, i) => { if (margin(i) < margin(minI)) minI = i; });
+  // rows: start, quarter points, every stop, the tightest point and the destination
+  const idx = new Set([0, pts.length - 1, minI]);
+  for (const f of [0.25, 0.5, 0.75]) idx.add(idxAtDist(pts, tr.total.dist * f));
+  for (const s of tr.stops || []) idx.add(s.idx);
+  const rows = [...idx].sort((a, b) => a - b).map((i) => {
+    const m = margin(i), cls = m < 0 ? "bad" : m < 1800 ? "warn" : "";
+    const where = i === 0 ? (ko ? "출발" : "Start") : i === pts.length - 1 ? (ko ? "도착" : "Destination") : distTxt(pts[i].dist);
+    return `<tr${i === minI ? ' class="tight"' : ""}><td>${where}${i === minI && i !== 0 ? (ko ? " · 가장 빠듯" : " · tightest") : ""}</td><td>${D(pts[i].t)}</td><td>${D(o.plssHours * 3600 - pts[i].t)}</td><td>${D(A.back[i])}</td><td class="${cls}">${m < 0 ? "−" + D(-m) : D(m)}</td></tr>`;
+  }).join("");
+  const strip = A.samples.map((s) => { const m = margin(Math.min(pts.length - 1, s.i));
+    return `<i style="flex:1;background:${m < 0 ? "#e9354f" : m < 1800 ? "#f5c84b" : "#2fd68f"}"></i>`; }).join("");
+  return `<div class="card"><div class="eyebrow">${ko ? "산소 계획 · 계획용 예상치, 센서 값 아님" : "Oxygen plan · planning estimate, not a sensor reading"}</div>
+    <div class="kv"><div>${ko ? "우주복 산소" : "Suit oxygen"}<b>${fmt(o.plssHours, 1)} h</b></div><div>${ko ? "예비" : "Reserve"}<b>${fmt(o.reserveHours, 1)} h</b></div><div>${ko ? "사용 가능" : "Usable"}<b>${D(usable)}</b></div></div>
+    <table class="o2-table"><thead><tr><th>${ko ? "위치" : "Where"}</th><th>${ko ? "경과" : "Time out"}</th><th>${ko ? "산소 잔량" : "O₂ left"}</th><th>${ko ? "돌아가는 시간" : "Walk back"}</th><th>${ko ? "귀환 여유" : "Margin"}</th></tr></thead><tbody>${rows}</tbody></table>
+    <div class="strip">${strip}</div><div class="legend-row" style="justify-content:space-between"><span>${ko ? "출발" : "start"}</span><span>${ko ? "초록 = 여유 30분 이상 · 노랑 = 빠듯 · 빨강 = 부족" : "green = 30 min+ margin · yellow = tight · red = short"}</span><span>${ko ? "도착" : "end"}</span></div>
+    <p class="small">${ko
+      ? `계산 방법: 우주복 산소가 일정하게 줄어 ${fmt(o.plssHours, 1)}시간 간다고 가정하고(설정 → 우주복 산소), ${fmt(o.reserveHours, 1)}시간은 비상용으로 남겨요. 경로의 모든 지점에서 <b>지금까지 쓴 시간 + 같은 길로 출발지까지 걸어 돌아가는 시간</b>이 사용 가능한 산소 안에 들어와야 해요. 그 차이가 <b>귀환 여유</b>예요. 안내 중에는 지난 시간만큼 산소 잔량이 줄고, 현재 위치에서 다시 계산해요. 실제 소모는 운동량, 경사, 우주복에 따라 달라서, 실제 장비에서는 우주복의 산소 측정값으로 바꿔야 해요.`
+      : `How it's planned: the suit is assumed to use oxygen at a steady rate and last ${fmt(o.plssHours, 1)} h (Settings → Suit oxygen), with ${fmt(o.reserveHours, 1)} h kept for emergencies. At every point on the route, <b>time already out + time to walk back to the start along the same path</b> must fit in the usable oxygen; what's left over is the <b>walk-back margin</b>. During guidance, O₂ left counts down with elapsed time and the margin is recomputed from where you are. Real use varies with effort, slope and the suit, so a real system would replace this with the suit's own oxygen readings.`}</p></div>`;
+}
+
 function renderPanes() {
   if (!S.track) {
     $("#stepsIntro").textContent = "Choose a start and a destination first."; $("#stepList").innerHTML = "";
@@ -907,6 +937,7 @@ function renderPanes() {
   $("#reportBody").innerHTML = `
     <div class="card"><div class="eyebrow">Verdict</div><h3 style="color:${worst === "ok" ? "var(--ok)" : worst === "warn" ? "var(--warn)" : "#ff7083"}">${esc($("#statusText").textContent)}</h3>
       ${C.map((c) => `<div class="check ${c.lvl}"><span class="ic">${c.lvl === "ok" ? "✓" : c.lvl === "warn" ? "!" : "✕"}</span><span>${esc(c.title)}<small>${esc(c.sub)}</small></span></div>`).join("")}</div>
+    ${oxygenCard(tr, A)}
     <div class="card"><div class="eyebrow">Dangers along the route (${A.dangers.length})</div>${dangerHtml}</div>
     <div class="card"><div class="eyebrow">Elevation & slope</div>
       <div class="kv"><div>Highest<b>${fmt(A.emax)} m</b></div><div>Lowest<b>${fmt(A.emin)} m</b></div><div>Climb<b>↑${fmt(tr.total.ascent)} ↓${fmt(tr.total.descent)}</b></div></div>
@@ -1038,6 +1069,7 @@ function renderAbout() {
   const d = S.baseSite.dem_scale;   // the 8-bit scale disclosure is about the prebuilt box
   $("#aboutBody").innerHTML = `
     <h3>The site</h3><p>${esc(ABOUT_SITE)} Routes can be planned anywhere on Mars. Dotted outlines mark the ${CATALOG.dems.length} regions where Trek has a sharp regional elevation model (green: HiRISE ~1 m, purple: CTX / HRSC); elsewhere only the global 200 m blend exists, which is good for reconnaissance but can't show cliffs or boulder fields. The orange dashed box is the ground analysed for the current route: ${fmt((S.site.nx * S.site.cell_m) / 1000, 1)} × ${fmt((S.site.ny * S.site.cell_m) / 1000, 1)} km on a ${fmt(S.site.cell_m)} m grid from ${S.site.live ? `${esc(sourceLabel(S.site.source))}${S.site.rock ? `, rock density from ${esc(S.site.rock.mosaic)}` : ", rock density not assessed (no HiRISE mosaic)"}` : "the prebuilt lower Mount Sharp data"}. Context: NASA's <a href="https://science.nasa.gov/resource/curiositys-proposed-path-up-mount-sharp/" target="_blank" rel="noopener">Curiosity's proposed path up Mount Sharp</a>.</p>
+    <h3>How oxygen is planned</h3><p>A planning estimate, not a sensor reading. The suit is assumed to use oxygen at a steady rate over its rated time (Settings → Suit oxygen, default 8 h), with 1 h kept in reserve. At every point the time already out plus the time to walk back to the start along the same path must fit in the usable oxygen; the leftover is the walk-back margin. The route report's <b>Oxygen plan</b> shows it along the whole route, and guidance warns when the margin runs low. Real use varies with effort, slope and the suit.</p>
     <h3>How a route is planned</h3><ul>
       <li>A* search over the grid finds the quickest path, with extra cost near steep or rocky ground (the <i>route preference</i> setting).</li>
       <li>Crew on foot: no ground steeper than ${S.opts.maxSlope}°; walking speed from Tobler's hiking function, slowed by rocks.</li>
