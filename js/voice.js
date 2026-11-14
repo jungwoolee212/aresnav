@@ -494,14 +494,14 @@ function findShelter() {
   };
   // a "shelter" has to block clearly more sky than where you stand: widen the search until one does
   let best = null;
-  for (const [R, step] of [[400, 25], [1500, Math.max(50, site.cell_m * 3)], [3000, Math.max(100, site.cell_m * 5)]]) {
+  for (const [R, step] of [[400, 25], [1500, Math.max(50, site.cell_m * 3)], [3000, Math.max(100, site.cell_m * 5)], [6000, Math.max(150, site.cell_m * 8)]]) {
     const b = search(R, step);
     if (b && (!best || b.sky < best.sky - 0.02)) best = b;
     if (best && skyHere - best.sky >= 0.1) break;
   }
   const blocks = (sky) => Math.round((1 - sky) * 100);
   if (!best || skyHere - best.sky < 0.05)
-    return { error: `There's no real shelter near here: the terrain blocks only ${blocks(skyHere)} percent of the sky where you are, and no reachable spot within 3 kilometres blocks much more. Terrain only shields you where cliffs or crater walls block the sky. In a solar storm, head back to base: say take me back to base.` };
+    return { error: `There's no real shelter near here: the terrain blocks only ${blocks(skyHere)} percent of the sky where you are, and no reachable spot within 6 kilometres blocks much more. Terrain only shields you where cliffs or crater walls block the sky. In a solar storm, head back to base: say take me back to base.` };
   return { lat: best.lat, lon: best.lon, name: `Nearest shelter (terrain blocks ${blocks(best.sky)}% of the sky)`,
     shelterNote: `The terrain blocks ${blocks(skyHere)} percent of the sky here and ${blocks(best.sky)} percent there.` };
 }

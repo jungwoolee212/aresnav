@@ -371,7 +371,7 @@ const RULES = [
   [/^Terrain only shields you where cliffs or crater walls block the sky$/, "지형 차폐는 절벽이나 크레이터 벽이 하늘을 가리는 곳에서만 효과가 있습니다"],
   [/^Sky is (.+) open here and (.+) there$/, "여기는 하늘이 $1, 대피처는 $2 열려 있습니다"],
   [/^The terrain blocks (.+) of the sky here and (.+) there$/, "지형이 하늘을 가리는 비율은 여기가 $1, 대피처가 $2입니다"],
-  [/^There's no real shelter near here: the terrain blocks only (.+) of the sky where you are, and no reachable spot within 3 kilometres blocks much more$/, "근처에 쓸 만한 대피처가 없습니다. 지금 위치는 지형이 하늘의 $1만 가리고, 3킬로미터 안에 갈 수 있는 곳 중 훨씬 더 가려진 곳이 없습니다"],
+  [/^There's no real shelter near here: the terrain blocks only (.+) of the sky where you are, and no reachable spot within 6 kilometres blocks much more$/, "근처에 쓸 만한 대피처가 없습니다. 지금 위치는 지형이 하늘의 $1만 가리고, 6킬로미터 안에 갈 수 있는 곳 중 훨씬 더 가려진 곳이 없습니다"],
   [/^(.+) is (.+) kilometres away: too far for a surface traverse \(this planner goes up to 1,500 km\)$/, "$1까지 $2킬로미터: 지표 이동으로는 너무 멉니다(최대 1,500킬로미터)"],
   [/^I moved the map there$/, "지도를 그곳으로 옮겼습니다"],
   [/^(.+) is (.+) kilometres from (.+), too far to walk, so the route starts (\d+) kilometres (.+?) of it$/, (_, p, km, a, d, dir) => `${a}에서 ${p}까지는 ${km}킬로미터라 걸어가기엔 너무 멀어서, ${p}의 ${DIR_KO[dir] || dir}쪽 ${d}킬로미터 지점에서 출발하는 경로를 짰습니다`],
