@@ -352,6 +352,7 @@ function numberOf(s) {
 }
 const here = () => { const Lv = C.live(); return Lv ? { lat: Lv.st.lat, lon: Lv.st.lon, name: "Current position" } : null; };
 const ptOf = (p, name) => ({ lat: p.lat, lon: p.lon, name: name ?? p.name ?? null });
+const NEAR_START_M = 5000;   // when the destination is out of reach, the route starts this far from it
 function offset(p, brgDeg, m) {
   const r = (brgDeg * Math.PI) / 180;
   return { lat: p.lat + (Math.cos(r) * m) / M_PER_DEG, lon: p.lon + (Math.sin(r) * m) / (M_PER_DEG * Math.cos((p.lat * Math.PI) / 180)) };
@@ -491,11 +492,18 @@ function findShelter() {
     }
     return best;
   };
-  let best = search(400, 25);
-  if (!best || skyHere - best.sky < 0.05) { const far = search(1500, Math.max(50, site.cell_m * 3)); if (far && (!best || far.sky < best.sky - 0.02)) best = far; }
-  if (!best || skyHere - best.sky < 0.02)
-    return { error: `There's no real shelter near here: the sky is ${Math.round(skyHere * 100)} percent open where you are, and no reachable spot within 1.5 kilometres is more enclosed. Terrain only shields you where cliffs or crater walls block the sky.` };
-  return { lat: best.lat, lon: best.lon, name: `Nearest shelter (${Math.round(best.sky * 100)}% sky open)`, shelterNote: `Sky is ${Math.round(skyHere * 100)} percent open here and ${Math.round(best.sky * 100)} percent there.` };
+  // a "shelter" has to block clearly more sky than where you stand: widen the search until one does
+  let best = null;
+  for (const [R, step] of [[400, 25], [1500, Math.max(50, site.cell_m * 3)], [3000, Math.max(100, site.cell_m * 5)]]) {
+    const b = search(R, step);
+    if (b && (!best || b.sky < best.sky - 0.02)) best = b;
+    if (best && skyHere - best.sky >= 0.1) break;
+  }
+  const blocks = (sky) => Math.round((1 - sky) * 100);
+  if (!best || skyHere - best.sky < 0.05)
+    return { error: `There's no real shelter near here: the terrain blocks only ${blocks(skyHere)} percent of the sky where you are, and no reachable spot within 3 kilometres blocks much more. Terrain only shields you where cliffs or crater walls block the sky.` };
+  return { lat: best.lat, lon: best.lon, name: `Nearest shelter (terrain blocks ${blocks(best.sky)}% of the sky)`,
+    shelterNote: `The terrain blocks ${blocks(skyHere)} percent of the sky here and ${blocks(best.sky)} percent there.` };
 }
 function extreme(sign) {
   const S = C.S, site = S.site, prof = profileFor(S.mode, S.opts);
@@ -557,6 +565,24 @@ async function setRoute({ start, end, addCp, mode: newMode, go = false, fromHere
   }
   if (addCp) { const p = await resolvePlace(addCp); if (p.error) return p.error; spec.addCp = p; }
   if (fromHere && nav) spec.cps = [];   // a new destination mid-route replaces the old plan
+  let farNote = "";
+  {
+    const a = spec.start || S.start, b = spec.end || S.end;
+    // "go to Olympus Mons" with no start, or with a start on the other side of Mars: begin the walk a few km from it
+    // (on the side facing the old start) instead of stopping at "pick a start"
+    if (b && spec.end && !nav && !spec.start && end !== "base") {
+      const km = a ? distM([a.lat, a.lon], [b.lat, b.lon]) / 1000 : 0;
+      if (!a || km > 1500 || Math.abs(a.lon - b.lon) > 180) {
+        let brg = 180;
+        if (a) { let dl = a.lon - b.lon; dl = ((dl + 540) % 360) - 180; brg = ((Math.atan2(dl * Math.cos((b.lat * Math.PI) / 180), a.lat - b.lat) * 180) / Math.PI + 360) % 360; }
+        const dir = ["north", "north east", "east", "south east", "south", "south west", "west", "north west"][Math.round(brg / 45) % 8];
+        spec.start = { ...offset(b, brg, NEAR_START_M), name: `${NEAR_START_M / 1000} km ${dir} of ${b.name}` };
+        farNote = a ? `${b.name} is ${Math.round(km).toLocaleString("en-US")} kilometres from ${a.name || "your start"}, too far to walk, so the route starts ${NEAR_START_M / 1000} kilometres ${dir} of it. `
+          : `No start was set, so the route starts ${NEAR_START_M / 1000} kilometres ${dir} of ${b.name}. `;
+        if (b.site) C.flyTo(b.site);
+      }
+    }
+  }
   {
     const a = spec.start || S.start, b = spec.end || S.end;
     if (a && b && spec.end) {
@@ -575,8 +601,8 @@ async function setRoute({ start, end, addCp, mode: newMode, go = false, fromHere
   if (newMode && !start && !end && !addCp && res.need) return `Switched to ${newMode === "drive" ? "rover" : "on-foot"} mode.`;
   if (res.need === "start") return `Destination set${spec.end ? ` to ${spec.end.name}` : ""}. Where do you start? Say "start from" a place, or tap the map.`;
   if (res.need === "end") return `Start set${spec.start ? ` at ${spec.start.name}` : ""}. Where are you going?`;
-  if (!res.ok) return res.error || "I couldn't plan that route.";
-  return routeSpoken(res.navigating);
+  if (!res.ok) return farNote + (res.error || "I couldn't plan that route.");
+  return farNote + routeSpoken(res.navigating);
 }
 function routeAndWait(spec) {
   return new Promise((resolve) => {

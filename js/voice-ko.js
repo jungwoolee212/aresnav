@@ -295,7 +295,7 @@ export function dangerKo(title, sub) {
 // Anything it doesn't recognise (e.g. a Claude reply already in Korean) passes through unchanged.
 const NAME_KO = [
   // "2 km north west of X" first, so X can still be a coordinate with decimal points
-  [/(\S+) (km|m) (north east|north west|south east|south west|north|south|east|west) of (.+?)(?=[,:]|$)/g, (_, n, u, d, b) => `${b}에서 ${DIR_KO[d]}쪽 ${n}${u}`],
+  [/(\S+) (km|m) (north east|north west|south east|south west|north|south|east|west) of (.+?)(?=[,:]| to | from |$)/g, (_, n, u, d, b) => `${b}에서 ${DIR_KO[d]}쪽 ${n}${u}`],
   [/\bLanding plain\b/g, "착륙 평원"], [/\bUpper boxwork ridges\b/g, "상부 박스워크 능선"],
   [/\bGale crater \(Curiosity\)/g, "게일 크레이터(큐리오시티)"], [/\bJezero crater \(Perseverance\)/g, "예제로 크레이터(퍼서비어런스)"],
   [/\bColumbia Hills \(Spirit\)/g, "컬럼비아 힐스(스피릿)"], [/\bEndeavour crater \(Opportunity\)/g, "인데버 크레이터(오퍼튜니티)"],
@@ -303,7 +303,7 @@ const NAME_KO = [
   [/\bMars Pathfinder \(Sojourner\)/g, "마스 패스파인더(소저너)"], [/\bViking (1|2) landing site\b/g, "바이킹 $1호 착륙지"], [/\bZhurong \(Tianwen-1\)/g, "주룽(톈원 1호)"],
   [/\bOlympus Mons\b/g, "올림푸스 산"], [/\bValles Marineris\b/g, "매리너스 협곡"], [/\bHellas Planitia\b/g, "헬라스 평원"], [/\bElysium Mons\b/g, "엘리시움 산"],
   [/\bArsia Mons\b/g, "아르시아 산"], [/\bPavonis Mons\b/g, "파보니스 산"], [/\bAscraeus Mons\b/g, "아스크라이우스 산"], [/\bUtopia Planitia\b/g, "유토피아 평원"],
-  [/\bNearest shelter \((\d+)% sky open\)/g, "가장 가까운 대피처(하늘 $1% 개방)"],
+  [/\bNearest shelter \((\d+)% sky open\)/g, "가장 가까운 대피처(하늘 $1% 개방)"], [/\bNearest shelter \(terrain blocks (\d+)% of the sky\)/g, "가장 가까운 대피처(지형이 하늘의 $1% 가림)"],
   [/\b(Highest|Lowest) point \((-?\d+) m\)/g, (_, w, e) => `${w === "Highest" ? "최고" : "최저"} 지점(고도 ${e}m)`],
   [/(\d+) m (left|right|ahead|back) of (your position|the start)/g, (_, n, d, b) => `${b === "the start" ? "출발지" : "현재 위치"}에서 ${{ left: "왼쪽", right: "오른쪽", ahead: "앞쪽", back: "뒤쪽" }[d]} ${n}m`],
   [/\bCurrent position\b/g, "현재 위치"], [/\byour position\b/g, "현재 위치"], [/\bthe start\b/g, "출발지"], [/\bthe destination\b/g, "목적지"], [/\bDestination\b(?! set)/g, "목적지"],
@@ -367,8 +367,12 @@ const RULES = [
   [/^There's no real shelter near here: the sky is (.+) open where you are, and no reachable spot within 1\.5 kilometres is more enclosed$/, "근처에 쓸 만한 대피처가 없습니다. 지금 위치는 하늘이 $1 열려 있고, 1.5킬로미터 안에 이보다 더 가려진 곳이 없습니다"],
   [/^Terrain only shields you where cliffs or crater walls block the sky$/, "지형 차폐는 절벽이나 크레이터 벽이 하늘을 가리는 곳에서만 효과가 있습니다"],
   [/^Sky is (.+) open here and (.+) there$/, "여기는 하늘이 $1, 대피처는 $2 열려 있습니다"],
+  [/^The terrain blocks (.+) of the sky here and (.+) there$/, "지형이 하늘을 가리는 비율은 여기가 $1, 대피처가 $2입니다"],
+  [/^There's no real shelter near here: the terrain blocks only (.+) of the sky where you are, and no reachable spot within 3 kilometres blocks much more$/, "근처에 쓸 만한 대피처가 없습니다. 지금 위치는 지형이 하늘의 $1만 가리고, 3킬로미터 안에 갈 수 있는 곳 중 훨씬 더 가려진 곳이 없습니다"],
   [/^(.+) is (.+) kilometres away: too far for a surface traverse \(this planner goes up to 1,500 km\)$/, "$1까지 $2킬로미터: 지표 이동으로는 너무 멉니다(최대 1,500킬로미터)"],
-  [/^I moved the map there$/, "지도를 그곳으로 옮겼습니다"], [/^Pick a start near it, or tap the map$/, "근처에서 출발지를 고르거나 지도를 누르세요"],
+  [/^I moved the map there$/, "지도를 그곳으로 옮겼습니다"],
+  [/^(.+) is (.+) kilometres from (.+), too far to walk, so the route starts (\d+) kilometres (.+?) of it$/, (_, p, km, a, d, dir) => `${a}에서 ${p}까지는 ${km}킬로미터라 걸어가기엔 너무 멀어서, ${p}의 ${DIR_KO[dir] || dir}쪽 ${d}킬로미터 지점에서 출발하는 경로를 짰습니다`],
+  [/^No start was set, so the route starts (\d+) kilometres (.+?) of (.+)$/, (_, d, dir, p) => `출발지가 없어서 ${p}의 ${DIR_KO[dir] || dir}쪽 ${d}킬로미터 지점에서 출발하는 경로를 짰습니다`], [/^Pick a start near it, or tap the map$/, "근처에서 출발지를 고르거나 지도를 누르세요"],
   [/^Paused$/, "일시정지했습니다"], [/^Resuming guidance$/, "안내를 계속합니다"], [/^Simulation speed (\d+) times$/, "시뮬레이션 속도 $1배"],
   [/^Already at the (fastest|slowest) simulation speed, (\d+) times$/, (_, f, n) => `이미 가장 ${yesNo(f === "fastest", "빠른", "느린")} 속도입니다. ${n}배`],
   [/^Opening the helmet display$/, "헬멧 화면을 엽니다"], [/^Back to the map$/, "지도로 돌아갑니다"], [/^Ending navigation$/, "안내를 종료합니다"],
