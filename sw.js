@@ -7,7 +7,7 @@
 //    surroundings), kept between visits.
 // New places that were never loaded still need a connection.
 
-const VERSION = "2026-11-15c";                 // bump to ship a new app version
+const VERSION = "2026-11-15d";                 // bump to ship a new app version
 const SHELL = `marswalk-shell-${VERSION}`;     // app code: replaced on each version
 const LIBS = "marswalk-libs";                  // CDN libraries and fonts: pinned versions, kept
 const TREK = "marswalk-trek";                  // NASA Mars Trek tiles and elevation: kept across versions

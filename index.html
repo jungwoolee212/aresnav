@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Marswalk Navigator</title>
+  <title>AresNav</title>
   <meta name="description" content="Pick a start and destination anywhere on Mars: the navigator plans the safest walking or rover route on NASA Mars Trek terrain, checks oxygen walk-back, slope, rocks, sunlight and radiation shielding, and guides you turn by turn on a map, in 3D, in a helmet HUD or by voice (English or Korean)." />
   <!-- Use of AI (SI): most of this app's code was written with an AI coding assistant (Claude Code, Anthropic) under the team's direction; the team designed, tested and reviewed it. No data or images in the app are AI-generated. See README, "Use of AI (SI) tools". -->
   <meta name="ai-generated-code" content="Most code written with Claude Code (Anthropic) under the team's direction; designed, tested and reviewed by the team. Data and images are not AI-generated (NASA Mars Trek)." />
@@ -18,7 +18,7 @@
   <header class="topbar">
     <div class="brand">
       <svg viewBox="0 0 32 32" width="24" height="24" aria-hidden="true"><circle cx="16" cy="16" r="13" fill="var(--mars)"/><path d="M6 18c5-3 9 2 14-1s6-2 7-1" stroke="#842e12" stroke-width="2.5" fill="none"/></svg>
-      <span class="brand-name">Marswalk Navigator</span>
+      <span class="brand-name">AresNav</span>
     </div>
     <div class="clock" title="Mars time at Gale crater, computed live from UTC">
       <span><span class="k">SOL</span> <span id="clkSol">—</span></span>
@@ -42,7 +42,7 @@
   </header>
 
   <main class="stage">
-    <div id="map" aria-label="Map of the Marswalk site"></div>
+    <div id="map" aria-label="Map of Mars"></div>
     <div class="map-legend" id="mapLegend"></div>
     <!-- 3D view of the analysed terrain (js/map3d.js, loaded on first use) -->
     <div id="map3d" class="map3d hidden" aria-label="3D view of the analysed terrain">
@@ -209,6 +209,13 @@
           <input id="siteSearch" class="site-search" type="search" placeholder="Search 1,900 marked places: Olympus Mons, Bradbury Landing…" aria-label="Search marked places" />
           <div id="siteList" class="site-list"></div>
           <p class="hint">Dotted outlines on the map: green = HiRISE ~1 m elevation, purple = CTX / HRSC. Anywhere else uses the global 200 m blend.</p>
+        </div>
+        <div class="card" id="offlineCard">
+          <div class="eyebrow">Offline routes</div>
+          <p class="hint">Key traverses at real rover sites. Save them while you have a connection: they then open, plan and guide with no network, as a crew would need when a dust storm cuts the link.</p>
+          <div id="offlineList" class="site-list"></div>
+          <button class="btn small" id="btnSaveOffline" type="button">Save all for offline</button>
+          <p class="hint" id="offlineStatus"></p>
         </div>
         <div class="card">
           <div class="eyebrow">Base map</div>

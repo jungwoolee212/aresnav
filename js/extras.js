@@ -104,7 +104,7 @@ const xml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&
 export function toGPX(track, { name, dangers = [], mode }) {
   const pts = track.pts;
   const wpt = (lat, lon, n, desc = "") => `  <wpt lat="${lat.toFixed(7)}" lon="${lon.toFixed(7)}"><name>${xml(n)}</name>${desc ? `<desc>${xml(desc)}</desc>` : ""}</wpt>\n`;
-  let s = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Marswalk Navigator" xmlns="http://www.topografix.com/GPX/1/1">\n`;
+  let s = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="AresNav" xmlns="http://www.topografix.com/GPX/1/1">\n`;
   s += `  <metadata><name>${xml(name)}</name><desc>Mars, planetocentric latitude, east-positive longitude (Mars 2000 sphere). Elevations in metres relative to the Mars areoid. ${mode === "drive" ? "Rover" : "Crew on foot"} route planned from NASA Mars Trek terrain. Planning aid only.</desc></metadata>\n`;
   for (const st of track.stops) { const p = pts[st.idx]; s += wpt(p.lat, p.lon, st.stop.name, st.stop.dwell ? `Stop ${st.stop.dwell} min` : ""); }
   for (const d of dangers) { const p = pts[d.i]; s += wpt(p.lat, p.lon, `Hazard ${d.n}: ${d.title}`, d.sub); }

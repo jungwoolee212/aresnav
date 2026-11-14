@@ -716,7 +716,7 @@ function answer(q, Lv) {
 }
 
 // ---------- Claude (optional) ----------
-const SYSTEM = `You are the voice assistant inside Marswalk Navigator, a route planning and guidance tool for crew walking in spacesuits or driving a pressurized rover in Gale crater, Mars. Each message comes with a JSON snapshot of the app: the planning state, or live telemetry during guidance.
+const SYSTEM = `You are the voice assistant inside AresNav, a route planning and guidance tool for crew walking in spacesuits or driving a pressurized rover in Gale crater, Mars. Each message comes with a JSON snapshot of the app: the planning state, or live telemetry during guidance.
 
 Your reply is read aloud by text-to-speech to someone who may be walking or driving, so answer in one to three short sentences with no lists, markdown, emoji or symbols, and write units as words. Reply in the language the crew member used.
 

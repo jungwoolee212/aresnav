@@ -55,6 +55,8 @@ export const navKo = {
 
 // static labels: [selector, Korean]; the original text is kept on the element to switch back
 const STATIC = [
+  ["#offlineCard .eyebrow", "오프라인 경로"], ["#offlineCard .hint:not(#offlineStatus)", "실제 로버 탐사지의 주요 경로예요. 연결이 있을 때 저장해 두면, 모래 폭풍 등으로 연결이 끊겨도 경로를 열고, 계획하고, 안내받을 수 있어요."],
+  ["#btnSaveOffline", "모두 오프라인 저장"],
   ["#fieldStart .rc-k", "출발지"], ["#fieldEnd .rc-k", "목적지"], ["#btnAddCp", "+ 체크포인트 추가"], ["#btnExample", "예시 경로"], ["#btnClear", "지우기"],
   ['.mode[data-mode="walk"]', "도보"], ['.mode[data-mode="drive"]', "로버"], ["#btnStart", "안내 시작"], ["#btnSteps", "단계"], ["#btnReport", "보고서"],
   [".profile-head .eyebrow", "고도"], ["#sheet > .hint", "출발지·목적지·체크포인트를 끌어서 옮기면 경로가 자동으로 다시 계산됩니다."],

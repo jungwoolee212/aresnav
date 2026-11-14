@@ -1,4 +1,4 @@
-# Marswalk Navigator
+# AresNav: Mars EVA Navigator
 
 **Live demo: [jungwoolee212.github.io/mars-eva-navigator](https://jungwoolee212.github.io/mars-eva-navigator/)**. It runs in the browser with nothing to install. An example route is already planned when it opens: press *Start*.
 
@@ -33,7 +33,7 @@ Anywhere on Mars (88°S–88°N). Once start and destination are set, the app pi
 | Ground | Elevation used | What the result means |
 |---|---|---|
 | Prebuilt box, lower Mount Sharp (orange) | `data/` (HiRISE DEM) | EVA-grade |
-| Regional models outlined on the map: Gale, Jezero, Columbia Hills, Endeavour, Victoria, InSight, Valles Marineris, Deuteronilus, Apollinaris… (`js/catalog.js`) | HiRISE ~1 m or CTX/HRSC ~20–50 m. Metres straight from Trek's elevation services where they exist; for models served only as 8-bit tiles, a metre scale fitted against the global MOLA + HRSC blend | EVA-grade on HiRISE; coarser on CTX/HRSC |
+| The 10 regional elevation models outlined on the map: Gale, Columbia Hills, Endeavour, Victoria, InSight, West Candor (Valles Marineris), two small HiRISE models and two HRSC areas along *The Martian* path (`js/catalog.js`) | HiRISE ~1–5 m, CTX ~10–20 m or HRSC ~80 m. Metres straight from Trek's elevation services where they exist; for models served only as 8-bit tiles, a metre scale fitted against the global MOLA + HRSC blend | EVA-grade on HiRISE; coarser on CTX/HRSC |
 | Everywhere else | Global MOLA + HRSC blend, ~200 m/px | Rough guide only: the general way is right, but cliffs, ledges and rocks smaller than a few hundred metres don't show, so it is flagged in the safety checks and never called "safe to go" on foot |
 
 **Places NASA Trek marks** (`js/places.js`, built by `tools/build_places.py`) are on the map and can be searched, spoken and used as start or destination: Trek's 12 mission bookmarks, 95 mission waypoints (e.g. Bradbury Landing, Vera Rubin Ridge, The Hab), 5 rover / story traverses, and all 1,783 IAU-named features. Click a point → *Start here* / *Make this the destination*, or search under Layers → Go to a site.
@@ -59,7 +59,7 @@ During guidance the navigator speaks each turn, steep section, checkpoint and sa
 - Commands: *pause*, *resume*, *faster*, *slower*, *repeat*, *mute*, *open HUD*, *end navigation*
 - Re-routing from where you are: *"Take me to the nearest shelter"*, *"Take me back to base"*, *"Take me to Camp Two"*
 
-Answers come from the live route state onboard, with no network needed (a crew on Mars can't wait 5–20 minutes for Earth). Optionally, paste a Claude API key in **Settings → Voice assistant**: requests the onboard parser doesn't handle then go to Claude (`claude-opus-5-5`) with a snapshot of the app, and Claude can plan routes through a `set_route` tool that uses the same place resolver. Commands still run onboard. The key is kept only in that browser's localStorage and is sent only to the Anthropic API. If Claude can't be reached, the onboard answer is used.
+Answers come from the live route state onboard, with no network needed (a crew on Mars can't wait 5–20 minutes for Earth, and a dust storm can cut the link entirely; see Works offline). Optionally, paste a Claude API key in **Settings → Voice assistant**: requests the onboard parser doesn't handle then go to Claude (`claude-opus-5-5`) with a snapshot of the app, and Claude can plan routes through a `set_route` tool that uses the same place resolver. Commands still run onboard. The key is kept only in that browser's localStorage and is sent only to the Anthropic API. If Claude can't be reached, the onboard answer is used.
 
 **Korean (한국어).** Tap **EN/한** in the voice panel (or Settings → Voice language). Recognition switches to ko-KR, and replies and turn-by-turn prompts are spoken in Korean: *"착륙 평원에서 박스워크 능선까지 안내해 줘"*, *"가장 가까운 대피소로 데려가 줘"*, *"북서쪽으로 2킬로미터 가 줘"*, *"남위 4.55 동경 137.55에서 출발"*, *"산소 얼마나 남았어?"*, *"다음은 어디로 가?"*, *"일시정지"*, *"기지로 돌아가"*. `js/voice-ko.js` maps Korean phrasing onto the same commands and translates the assistant's sentences.
 
@@ -160,6 +160,25 @@ Every outside source the app uses, where it's used, and its licence or credit li
 
 **Reviewed, not used:** the Mars 2020 raw-image feed (the app draws a synthetic 3D terrain view instead). The USGS geologic map is used for context only, not for routing: at 1:20,000,000 the whole Mount Sharp planning area falls in two of its units.
 
+## Works offline
+
+On Mars a crew can't count on a network link. A dust storm, terrain blocking the line of sight to the habitat or a relay orbiter, or simply walking far from base can cut the connection at any moment. So AresNav keeps working without one:
+
+- The app, its libraries and fonts, and the prebuilt Gale terrain are saved on the device the first time it opens (a service worker, `sw.js`).
+- Every NASA Mars Trek map tile and elevation tile the app loads is kept too. Once a route has been planned with a connection, planning it again, guidance, the safety checks, the 3D view, the helmet display and the voice assistant's understanding all work with no network.
+- **Offline routes** (Layers → Offline routes): four key traverses at real rover sites, all on sharp elevation models. Press *Save all for offline* while connected; afterwards they open, plan and guide with no network:
+  - Gale: Landing plain → Upper boxwork ridges
+  - Gale: Pahrump Hills → Murray Buttes (Curiosity)
+  - Gusev: Columbia Memorial Station → Home Plate (Spirit)
+  - Endeavour: Matijevic Hill → Marathon Valley (Opportunity)
+- Places that were never loaded still need a connection, and the app says so instead of failing silently.
+
+Tested by planning online, then shutting the web server down and blocking every network request: all four saved routes planned and guided, and the voice assistant answered in English and Korean. Typed questions work fully offline; spoken input depends on the browser (Chrome sends speech to an online recogniser).
+
 ## Limits
 
 Planning aid for a concept study. Features smaller than a few metres aren't in the slope grid. Position during navigation is simulated. Walking speed, suit duration and rover limits are adjustable assumptions.
+
+## License
+
+The code is released under the [MIT License](LICENSE). NASA data (in `data/` and fetched from Mars Trek) stays under NASA's terms, and third-party libraries and fonts keep their own licences (see References).

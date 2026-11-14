@@ -1,4 +1,4 @@
-// Marswalk Navigator — choose a start and a destination, get the safest route, a hazard /
+// AresNav — choose a start and a destination, get the safest route, a hazard /
 // elevation / sunlight / shielding assessment, and turn-by-turn guidance (map or helmet HUD).
 // Data: NASA Mars Trek HiRISE mosaic + HiRISE DEM tiles (processed by tools/build_site_data.py),
 // Trek global layers for context, and Mars sun astronomy. Nothing else.
@@ -209,6 +209,7 @@ function buildLayers() {
   renderLegend();
   renderSites();
   $("#siteSearch").addEventListener("input", renderSites);
+  renderOffline(); $("#btnSaveOffline").addEventListener("click", saveOfflineRoutes);
 }
 // jump-to list: mission sites, then every regional elevation model in the catalog
 
@@ -269,6 +270,47 @@ function renderSites() {
     const it = items[+b.dataset.i]; flyToSite(it); if (innerWidth <= 760) closeDrawer();
     if (it.pick) setTimeout(() => placePopup(it), 1300);   // a single point: offer start / destination
   }));
+}
+// ---------------- offline routes ----------------
+// Key traverses at real rover sites (Trek mission waypoints), all on sharp HiRISE / CTX elevation models. "Save all" plans each one once while online, which
+// stores its terrain and map tiles in the offline cache (sw.js); afterwards they open with no network.
+const KEY_ROUTES = [
+  { id: "gale-boxwork", en: "Gale: Landing plain → Upper boxwork ridges", ko: "게일: 착륙 평원 → 상부 박스워크 능선", start: EXAMPLE.start, end: EXAMPLE.end },
+  { id: "gale-murray", en: "Gale: Pahrump Hills → Murray Buttes", ko: "게일: 파럼프 힐스 → 머레이 뷰트",
+    start: { name: "Pahrump Hills", lat: -4.6624, lon: 137.3772 }, end: { name: "Murray Buttes", lat: -4.6954, lon: 137.3533 } },
+  { id: "gusev-homeplate", en: "Gusev: Columbia Memorial Station → Home Plate", ko: "구세프: 컬럼비아 기념 기지 → 홈 플레이트",
+    start: { name: "Columbia Memorial Station", lat: -14.5719, lon: 175.4785 }, end: { name: "Home Plate", lat: -14.6061, lon: 175.5313 } },
+  { id: "endeavour-marathon", en: "Endeavour: Matijevic Hill → Marathon Valley", ko: "인데버: 마티예비치 힐 → 마라톤 밸리",
+    start: { name: "Matijevic Hill", lat: -2.2317, lon: -5.3554 }, end: { name: "Marathon Valley", lat: -2.3148, lon: -5.3525 } },
+];
+const offlineSaved = () => store.get("marswalk.offline") || {};
+function renderOffline(status) {
+  const saved = offlineSaved(), ko = KOUI();
+  $("#offlineList").innerHTML = KEY_ROUTES.map((r, i) => `<button data-i="${i}">${esc(ko ? r.ko : r.en)}<small>${saved[r.id] ? (ko ? "✓ 오프라인 저장됨" : "✓ saved for offline") : (ko ? "연결이 있을 때 저장" : "not saved yet")}</small></button>`).join("");
+  $$("#offlineList button").forEach((b) => b.addEventListener("click", () => { openKeyRoute(KEY_ROUTES[+b.dataset.i]); if (innerWidth <= 760) closeDrawer(); }));
+  if (status !== undefined) $("#offlineStatus").textContent = status;
+}
+function openKeyRoute(r, cb) {
+  routeTo({ start: r.start, end: r.end, cps: [] }, (res) => {
+    if (res.ok && navigator.onLine) { const s = offlineSaved(); s[r.id] = 1; store.set("marswalk.offline", s); renderOffline(); }
+    cb?.(res);
+  });
+}
+async function saveOfflineRoutes() {
+  const ko = KOUI(), btn = $("#btnSaveOffline");
+  if (!navigator.onLine) return renderOffline(ko ? "연결이 없어요. 연결된 상태에서 저장하세요." : "No connection: save while online.");
+  if (NAV) return renderOffline(ko ? "안내를 끝낸 뒤 저장하세요." : "End guidance first, then save.");
+  const prev = S.start && S.end ? { start: S.start, end: S.end, cps: S.cps.map((c) => ({ lat: c.lat, lon: c.lon, name: c.name })) } : null;
+  btn.disabled = true;
+  let ok = 0;
+  for (const [i, r] of KEY_ROUTES.entries()) {
+    renderOffline(`${ko ? "저장 중" : "Saving"} ${i + 1}/${KEY_ROUTES.length}: ${ko ? r.ko : r.en}…`);
+    const res = await new Promise((done) => openKeyRoute(r, done));
+    if (res.ok) { ok++; await new Promise((t) => setTimeout(t, 2500)); }   // let this view's map tiles load into the cache
+  }
+  btn.disabled = false;
+  if (prev) routeTo(prev, () => {});
+  renderOffline(ko ? `${ok}/${KEY_ROUTES.length}개 경로를 오프라인으로 저장했어요.` : `Saved ${ok} of ${KEY_ROUTES.length} routes for offline use.`);
 }
 function flyToSite(it) { if (it.bounds) map.flyToBounds(it.bounds, { duration: 1.2 }); else map.flyTo([it.lat, it.lon], it.zoom || 11, { duration: 1.2 }); }
 function renderLegend() {
@@ -974,20 +1016,20 @@ function routeName() { return `${S.start?.name || coordTxt(S.start)} to ${S.end?
 function exportGpx() {
   if (!S.track) return;
   const slug = routeName().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "route";
-  download(`marswalk-${slug}.gpx`, toGPX(S.track, { name: `Marswalk: ${routeName()}`, dangers: S.ana.dangers, mode: S.mode }), "application/gpx+xml");
+  download(`aresnav-${slug}.gpx`, toGPX(S.track, { name: `AresNav: ${routeName()}`, dangers: S.ana.dangers, mode: S.mode }), "application/gpx+xml");
 }
 function exportSheet() {
   if (!S.track) return;
   const tr = S.track, t0 = startSec(), C = S.checks;
   const worst = C.some((c) => c.lvl === "bad") ? "bad" : C.some((c) => c.lvl === "warn") ? "warn" : "ok";
   const ok = openRouteSheet({
-    title: `Marswalk route sheet: ${routeName()}`,
+    title: `AresNav route sheet: ${routeName()}`,
     summary: `${tr.kind === "drive" ? "Rover" : "Crew on foot"} · ${distTxt(tr.total.dist)} · ${dur(tr.total.time)} · start ${hhmm(t0)} LMST, arrive ${hhmm(t0 + tr.total.time)} · ↑${fmt(tr.total.ascent)} m ↓${fmt(tr.total.descent)} m · terrain ${fmt(S.site.cell_m)} m grid (${S.site.live ? sourceLabel(S.site.source) : "HiRISE 1 m DEM, prebuilt"}) · sol ${marsClock().sol}`,
     status: $("#statusText").textContent, statusLvl: worst, checks: C,
     steps: S.mans.map((m, k) => ({ text: m.text, sub: m.sub, d: m.type === "arrive" && k === S.mans.length - 1 ? `${hhmm(t0 + tr.total.time)} LMST` : distTxt(m.len) })),
     dangers: S.ana.dangers.map((d) => ({ n: d.n, title: d.title, sub: d.sub, at: distTxt(d.dist) })),
     profileSvg: $("#profileSvg").outerHTML,
-    notes: "Planning aid for a concept study, not flight software. Terrain from NASA Mars Trek; radiation shielding is a relative sky-openness measure, not a dose. Generated by Marswalk Navigator.",
+    notes: "Planning aid for a concept study, not flight software. Terrain from NASA Mars Trek; radiation shielding is a relative sky-openness measure, not a dose. Generated by AresNav.",
   });
   if (!ok) toast("Allow pop-ups for this page to open the route sheet.");
 }
@@ -1163,7 +1205,7 @@ function hudApi() {
 
 // ---------------- help ----------------
 const HELP = [
-  ["Welcome to Marswalk", "Plan safe EVA routes on Mars, on foot or by rover. An example route up lower Mount Sharp is already planned behind this card: press Start to try the guidance, or follow the next steps to plan your own.", '<svg width="80" height="80" viewBox="0 0 32 32"><circle cx="16" cy="16" r="13" fill="#e8743b"/><path d="M6 18c5-3 9 2 14-1s6-2 7-1" stroke="#842e12" stroke-width="2.5" fill="none"/></svg>'],
+  ["Welcome to AresNav", "Plan safe EVA routes on Mars, on foot or by rover. An example route up lower Mount Sharp is already planned behind this card: press Start to try the guidance, or follow the next steps to plan your own.", '<svg width="80" height="80" viewBox="0 0 32 32"><circle cx="16" cy="16" r="13" fill="#e8743b"/><path d="M6 18c5-3 9 2 14-1s6-2 7-1" stroke="#842e12" stroke-width="2.5" fill="none"/></svg>'],
   ["Pick your start", "Tap the map where the EVA begins (a green dot), anywhere on Mars. Dotted outlines mark sharp HiRISE / CTX elevation models; the terrain around your route is analysed when you choose it. Use Layers → Go to a site to jump to Jezero, Gale, Columbia Hills and more. Or tap the mic and say “route from the landing plain to the upper boxwork ridges”.", '<svg width="80" height="80" viewBox="0 0 80 80"><circle cx="40" cy="40" r="14" fill="#2fd68f" stroke="#fff" stroke-width="5"/></svg>'],
   ["Pick your destination", "Tap again for where you're going. The navigator finds the safest route around steep slopes and rock fields, colour-coded by slope.", '<svg width="200" height="80" viewBox="0 0 200 80"><path d="M20 60 C70 60 70 20 120 25 S170 30 180 20" stroke="#2fd68f" stroke-width="7" fill="none"/><circle cx="20" cy="60" r="8" fill="#2fd68f" stroke="#fff" stroke-width="3"/><circle cx="180" cy="20" r="8" fill="#e9354f" stroke="#fff" stroke-width="3"/></svg>'],
   ["Read the safety check", "Time, distance, oxygen walk-back margin, daylight, steep or rocky stretches, terrain shadow and radiation shielding. Open the report to see each danger on the map.", '<svg width="80" height="80" viewBox="0 0 80 80"><path d="M40 8 70 66H10z" fill="none" stroke="#f5c84b" stroke-width="6" stroke-linejoin="round"/><path d="M40 30v18M40 56v2" stroke="#f5c84b" stroke-width="6" stroke-linecap="round"/></svg>'],
@@ -1171,7 +1213,7 @@ const HELP = [
   ["Start navigating", "Press Start for spoken turn-by-turn guidance, or HUD for the helmet display with a 3D view of the terrain ahead. During guidance, Return to start and Nearest shelter re-route you in one tap. Tap the mic (or press V) to ask the voice assistant about oxygen, the next turn or the nearest shelter.", '<svg width="80" height="80" viewBox="0 0 24 24"><path d="M12 2 4 21l8-4 8 4z" fill="#2fd68f"/></svg>'],
 ];
 const HELP_KO = [
-  ["Marswalk에 오신 것을 환영합니다", "걸어서 또는 로버로 화성에서 안전한 EVA 경로를 계획하세요. 이 카드 뒤에 샤프산 아래쪽의 예제 경로가 이미 준비돼 있습니다. ‘안내 시작’을 눌러 안내를 체험하거나, 다음 단계를 따라 직접 경로를 만들어 보세요."],
+  ["AresNav에 오신 것을 환영합니다", "걸어서 또는 로버로 화성에서 안전한 EVA 경로를 계획하세요. 이 카드 뒤에 샤프산 아래쪽의 예제 경로가 이미 준비돼 있습니다. ‘안내 시작’을 눌러 안내를 체험하거나, 다음 단계를 따라 직접 경로를 만들어 보세요."],
   ["출발지 고르기", "EVA를 시작할 곳을 지도에서 누르세요(초록 점). 화성 어디든 됩니다. 점선 윤곽은 정밀한 HiRISE / CTX 고도 모델이 있는 곳이고, 경로를 정하면 그 주변 지형을 분석합니다. 레이어 → 사이트로 이동에서 예제로, 게일, 컬럼비아 힐스 등으로 바로 갈 수 있습니다. 또는 마이크를 누르고 “착륙 평원에서 박스워크 능선까지 안내해 줘”라고 말하세요."],
   ["목적지 고르기", "한 번 더 눌러 갈 곳을 정하세요. 내비게이터가 급경사와 바위 지대를 피해 가장 안전한 경로를 찾고, 경사에 따라 색으로 표시합니다."],
   ["안전 점검 읽기", "시간, 거리, 산소 귀환 여유, 일조, 가파르거나 바위가 많은 구간, 지형 그늘, 방사선 차폐를 보여 줍니다. 보고서를 열면 위험 지점을 지도에서 볼 수 있습니다."],
@@ -1257,7 +1299,7 @@ async function main() {
     startNav: () => { if (S.track && !NAV) { startNav(); return true; } return false; },
     exampleRoute: () => $("#btnExample").click(),
     flyTo: (it) => flyToSite(it),
-    onLang: () => { applyStatic(KOUI()); renderLegend(); renderCard(); if (!$("#help").classList.contains("hidden")) showHelp(helpK); if (S.track || S.error) renderSheet(); if (NAV) renderNav(live(NAV.t)); },
+    onLang: () => { applyStatic(KOUI()); renderLegend(); renderCard(); renderOffline(); if (!$("#help").classList.contains("hidden")) showHelp(helpK); if (S.track || S.error) renderSheet(); if (NAV) renderNav(live(NAV.t)); },
     setView: (v) => setView(v),
     refine: () => { if (!S.track) return false; S.opts.detail = "high"; $("#inDetail").value = "high"; changed(); return true; },
     clearRoute: () => $("#btnClear").click(),
