@@ -1,6 +1,6 @@
 # Marswalk Navigator
 
-**Live app: [jungwoolee212.github.io/mars-eva-navigator](https://jungwoolee212.github.io/mars-eva-navigator/)**. It runs in the browser with nothing to install. Press *Try an example route*, then *Start*.
+**Live demo: [jungwoolee212.github.io/mars-eva-navigator](https://jungwoolee212.github.io/mars-eva-navigator/)**. It runs in the browser with nothing to install. Press *Try an example route*, then *Start*.
 
 ![Route planning on lower Mount Sharp: the safest walking route, hazard overlay and safety checks](docs/plan.jpg)
 
