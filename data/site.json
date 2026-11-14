@@ -1,0 +1,25 @@
+{
+ "name": "Lower Mount Sharp, Gale crater",
+ "bbox": {
+  "west": 137.345,
+  "east": 137.425,
+  "south": -4.865,
+  "north": -4.745
+ },
+ "nx": 590,
+ "ny": 887,
+ "cell_m": 8.0,
+ "elev_offset": -5000,
+ "elev_scale": 0.1,
+ "dem_scale": {
+  "a": 17.97,
+  "b": -4569.2,
+  "rms_m": 4.6,
+  "note": "Trek's HiRISE DEM tiles are 8-bit; metres = a*DN + b, fitted once against published Curiosity traverse elevations."
+ },
+ "sources": [
+  "MRO HiRISE Curiosity roving-site mosaic (NASA Mars Trek)",
+  "MRO HiRISE Gale crater DEM (NASA Mars Trek)"
+ ],
+ "built": "2026-11-14"
+}
