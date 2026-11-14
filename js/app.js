@@ -10,6 +10,13 @@ import { marsClock, sunAt, daylight, seasonName } from "./sun.js";
 import { buildManeuvers, stateAt, nextManeuver, maneuverIcon, headingAt, idxAtDist, compassWord } from "./nav.js";
 import { renderTerrainView } from "./terrain3d.js";
 import { openHud, closeHud, hudIsOpen, updateHud } from "./hud.js";
+import { initVoice, voiceNavStart, voiceNavEnd, voiceTick, voiceToggleListen, voiceLang } from "./voice.js";
+import { uiKo, navKo, applyStatic } from "./ui-ko.js";
+import { inExtent, normLon, sourcesFor, sourceLabel, corridorFor, covers, buildSite, hasData } from "./terrain-live.js";
+import { CATALOG } from "./catalog.js";
+import { open3d, close3d, is3dOpen, update as update3d, updatePosition as pos3d, clearPosition as clear3dPos } from "./map3d.js";
+import { SITES } from "./mission.js";
+import { PLACES_DATA } from "./places.js";
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -19,6 +26,9 @@ const dur = (sec) => { const neg = sec < 0, m = Math.round(Math.abs(sec) / 60); 
 const distTxt = (m) => (m >= 1000 ? `${fmt(m / 1000, m >= 10000 ? 0 : 1)} km` : `${fmt(Math.max(0, Math.round(m / 10) * 10))} m`);
 const slopeColor = (s) => (s < 8 ? "#2fd68f" : s < 15 ? "#f5c84b" : s < 20 ? "#f58a3b" : "#e9354f");
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+// screen text follows the voice language (Korean or English)
+const KOUI = () => voiceLang() === "ko";
+const U = (s) => (KOUI() ? uiKo(s) : s);
 const coordTxt = (p) => `${fmt(Math.abs(p.lat), 4)}°${p.lat < 0 ? "S" : "N"} ${fmt(p.lon, 4)}°E`;
 const store = { get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} } };
 
@@ -49,17 +59,50 @@ const MarsCRS = L.extend({}, L.CRS.EPSG4326, { R: MARS_R });
 const TREK = (id, ext = "png") => `https://trek.nasa.gov/tiles/Mars/EQ/${id}/1.0.0/default/default028mm/{z}/{y}/{x}.${ext}`;
 const TREK_ATTR = '<a href="https://trek.nasa.gov/mars/" target="_blank" rel="noopener">NASA/JPL Mars Trek</a>';
 const trek = (id, ext, maxNative, extra = {}) => L.tileLayer(TREK(id, ext), { maxNativeZoom: maxNative, maxZoom: 20, noWrap: true, attribution: TREK_ATTR, ...extra });
-let map, layerDefs, routeGroup, casing, doneLine, markerGroup, dangerGroup, hoverDot, meMarker, sitePopup;
+let map, layerDefs, routeGroup, casing, doneLine, markerGroup, dangerGroup, hoverDot, meMarker, sitePopup, siteRect, coverageLayer;
+
+// switch the terrain grid the planner uses (prebuilt site or a corridor analysed in the browser)
+function setSite(site) {
+  if (S.site === site) return;
+  S.site = site;
+  const b = site.bbox, bounds = L.latLngBounds([[b.south, b.west], [b.north, b.east]]);
+  for (const d of layerDefs.overlays) if (d.key) { d.layer.setUrl(site.overlays[d.key]); d.layer.setBounds(bounds); }
+  siteRect.setBounds(bounds);
+  renderAbout();
+  sync3d(true);
+}
+const points3d = () => [S.start && { ...S.start, kind: "start" }, ...S.cps.map((c) => ({ ...c, kind: "cp" })), S.end && { ...S.end, kind: "end" }].filter(Boolean);
+function sync3d(refit = false) { if (is3dOpen()) update3d({ site: S.site, track: S.track, points: points3d() }, refit); }
+async function setView(mode) {
+  const three = mode === "3d";
+  $("#view3d").classList.toggle("on", three); $("#view2d").classList.toggle("on", !three);
+  $("#view3d").setAttribute("aria-pressed", three); $("#view2d").setAttribute("aria-pressed", !three);
+  $$("[data-view]").forEach((b) => b.classList.toggle("active", (b.dataset.view === "3d") === three));
+  if (!three) { close3d(); $("#map").style.visibility = ""; map.invalidateSize(); return; }
+  $("#map").style.visibility = "hidden";
+  try {
+    await open3d($("#map3d"), { site: S.site, track: S.track, points: points3d(), pick: (lat, lon) => {
+      if (NAV) return;
+      if (S.start && S.end && !S.pick) { toast("Start and destination are set. Use + Add checkpoint, then click the ground, or edit in 2D."); return; }
+      onMapClick({ latlng: { lat, lng: lon } });
+    } });
+  } catch (e) { toast(`The 3D view couldn't load (${e.message}).`); setView("2d"); }
+}
 
 function initMap() {
   const b = S.site.bbox;
-  map = L.map("map", { crs: MarsCRS, zoomControl: false, minZoom: 9, maxZoom: 20, attributionControl: true, zoomSnap: 0.25 });
+  map = L.map("map", { crs: MarsCRS, zoomControl: false, minZoom: 2, maxZoom: 20, attributionControl: true, zoomSnap: 0.25 });
   L.control.zoom({ position: "bottomright" }).addTo(map);
   L.control.scale({ position: "bottomleft", imperial: false }).addTo(map);
   map.attributionControl.setPrefix(false);
   map.fitBounds([[b.south, b.west], [b.north, b.east]]);
   buildLayers();
-  L.rectangle([[b.south, b.west], [b.north, b.east]], { color: "#e8743b", weight: 1.5, dashArray: "6 6", fill: false, interactive: false }).addTo(map);
+  // white: where routes can be planned (Gale HiRISE coverage); orange: ground analysed for the current route
+  // where Trek has a regional elevation model sharp enough for EVA planning (elsewhere: global 200 m blend)
+  coverageLayer = L.layerGroup(CATALOG.dems.map((d) => L.rectangle([[d.bbox[1], d.bbox[0]], [d.bbox[3], d.bbox[2]]],
+    { color: d.pxM <= 2 ? "#7dffc8" : "#b48cff", opacity: 0.7, weight: 1, dashArray: "2 5", fill: false, interactive: true })
+    .bindTooltip(`${esc(d.title)}<br>${d.pxM < 10 ? d.pxM.toFixed(1) : Math.round(d.pxM)} m/px · ${d.kind === "image" ? "metres from Trek" : "8-bit tiles, metre scale fitted to MOLA+HRSC"}`, { sticky: true }))).addTo(map);
+  siteRect = L.rectangle([[b.south, b.west], [b.north, b.east]], { color: "#e8743b", weight: 1.5, dashArray: "6 6", fill: false, interactive: false }).addTo(map);
   routeGroup = L.layerGroup().addTo(map);
   dangerGroup = L.layerGroup().addTo(map);
   markerGroup = L.layerGroup().addTo(map);
@@ -73,7 +116,10 @@ function buildLayers() {
   const msl = [[-4.93, 137.12], [-4.25, 137.73]];
   const viking = () => trek("Mars_Viking_MDIM21_ClrMosaic_global_232m", "jpg", 7);
   const ctx = () => trek("curiosity_ctx_mosaic", "png", 10, { bounds: [[-7.21, 136.28], [-3.58, 139.39]] });
-  const hirise = () => trek("curiosity_hirise_mosaic", "png", 16, { bounds: msl });
+  const hirise = () => L.layerGroup([trek("curiosity_hirise_mosaic", "png", 16, { bounds: msl }),
+    // every other regional mosaic in the catalog, CTX under HiRISE
+    ...CATALOG.mosaics.filter((m) => m.layer !== "curiosity_hirise_mosaic").sort((a, b) => (a.instrument === "CTX" ? -1 : 1) - (b.instrument === "CTX" ? -1 : 1))
+      .map((m) => trek(m.layer, m.fmt, m.zmax, { bounds: [[m.bbox[1], m.bbox[0]], [m.bbox[3], m.bbox[2]]] }))]);
   layerDefs = {
     base: [
       { name: "HiRISE imagery", kind: "optical", desc: "MRO HiRISE ~25 cm/px mosaic over CTX 6 m/px and Viking colour.", make: () => L.layerGroup([viking(), ctx(), hirise()]), on: true },
@@ -83,9 +129,11 @@ function buildLayers() {
       { name: "Viking colour mosaic", kind: "optical", desc: "Global true-colour context, 232 m/px.", make: () => viking() },
     ],
     overlays: [
-      { name: "EVA hazard", kind: "safety", desc: "Slope + rock score the route planner uses. Red = no-go.", make: () => L.imageOverlay("data/hazard.png", siteBounds), on: true, opacity: 0.45, legend: ["Hazard", "linear-gradient(90deg,rgba(30,220,140,.3),#ffd23c,#ff7828,#eb1e3c)", "low", "no-go"] },
-      { name: "Slope", kind: "topographic", desc: "Slope from the HiRISE DEM (≈70 m baseline).", make: () => L.imageOverlay("data/slope.png", siteBounds), opacity: 0.7, legend: ["Slope", "linear-gradient(90deg,rgba(60,210,120,.4),#fadc3c,#fa7828,#e61e3c)", "0°", "30°+"] },
-      { name: "Rock & ridge density", kind: "optical", desc: "Texture of the HiRISE imagery: boxwork ridges, blocks and outcrop edges light up.", make: () => L.imageOverlay("data/rough.png", siteBounds), opacity: 0.75, legend: ["Rocks", "linear-gradient(90deg,rgba(0,180,255,.15),#be50ff,#ff28c8)", "smooth", "dense"] },
+      { name: "Mission sites & traverses", kind: "NASA Trek", desc: "Trek's mission bookmarks (dashed), rover traverses and waypoints: Curiosity, Perseverance, Spirit, Opportunity, Sojourner, Viking, InSight, Phoenix, The Martian. Click a point to start or end a route there.", make: missionLayer, on: true, noOpacity: true },
+      { name: "IAU place names", kind: "NASA Trek", desc: "All 1,783 named features in Trek (craters, montes, valles…). Hover for the name; click to route there.", make: namesLayer, on: true, noOpacity: true },
+      { name: "EVA hazard", kind: "safety", desc: "Slope + rock score the route planner uses. Red = no-go.", key: "hazard", make: () => L.imageOverlay(S.site.overlays.hazard, siteBounds), on: true, opacity: 0.45, legend: ["Hazard", "linear-gradient(90deg,rgba(30,220,140,.3),#ffd23c,#ff7828,#eb1e3c)", "low", "no-go"] },
+      { name: "Slope", kind: "topographic", desc: "Slope from the HiRISE DEM (≈70 m baseline).", key: "slope", make: () => L.imageOverlay(S.site.overlays.slope, siteBounds), opacity: 0.7, legend: ["Slope", "linear-gradient(90deg,rgba(60,210,120,.4),#fadc3c,#fa7828,#e61e3c)", "0°", "30°+"] },
+      { name: "Rock & ridge density", kind: "optical", desc: "Texture of the HiRISE imagery: boxwork ridges, blocks and outcrop edges light up.", key: "rough", make: () => L.imageOverlay(S.site.overlays.rough, siteBounds), opacity: 0.75, legend: ["Rocks", "linear-gradient(90deg,rgba(0,180,255,.15),#be50ff,#ff28c8)", "smooth", "dense"] },
       { name: "THEMIS night-time IR", kind: "thermal", desc: "Mars Odyssey 100 m/px. Bright = warm at night = bedrock / cemented ground; dark = dust and sand.", make: () => trek("THEMIS_NightIR_ControlledMosaics_100m_v2_oct2018", "png", 9), opacity: 0.6 },
       { name: "THEMIS daytime IR", kind: "thermal", desc: "Mars Odyssey 100 m/px daytime infrared: morphology and sun-facing slopes.", make: () => trek("THEMIS_DayIR_ControlledMosaics_100m_v2_oct2018", "png", 9), opacity: 0.6 },
       { name: "TES thermal inertia", kind: "thermal", desc: "MGS TES, regional dusty vs rocky ground.", make: () => trek("TES_Thermal_Inertia", "png", 1), opacity: 0.5 },
@@ -107,16 +155,79 @@ function buildLayers() {
     d.layer = d.make();
     d.layer.setOpacity?.(d.opacity);
     const lab = document.createElement("label");
-    lab.innerHTML = `<input type="checkbox" ${d.on ? "checked" : ""}/><span class="ln">${d.name}<span class="kind">${d.kind}</span></span><span class="ld">${d.desc}</span><input type="range" min="0.1" max="1" step="0.05" value="${d.opacity}" aria-label="${d.name} opacity"/>`;
+    lab.innerHTML = `<input type="checkbox" ${d.on ? "checked" : ""}/><span class="ln">${d.name}<span class="kind">${d.kind}</span></span><span class="ld">${d.desc}</span>${d.noOpacity ? "" : `<input type="range" min="0.1" max="1" step="0.05" value="${d.opacity}" aria-label="${d.name} opacity"/>`}`;
     const cb = lab.querySelector("input[type=checkbox]"), rg = lab.querySelector("input[type=range]");
     cb.addEventListener("change", () => { cb.checked ? d.layer.addTo(map) : map.removeLayer(d.layer); renderLegend(); });
-    rg.addEventListener("input", () => d.layer.setOpacity(+rg.value));
-    rg.addEventListener("click", (e) => e.preventDefault());
+    rg?.addEventListener("input", () => d.layer.setOpacity(+rg.value));
+    rg?.addEventListener("click", (e) => e.preventDefault());
     $("#overlayLayers").appendChild(lab);
     if (d.on) d.layer.addTo(map);
   }
   renderLegend();
+  renderSites();
+  $("#siteSearch").addEventListener("input", renderSites);
 }
+// jump-to list: mission sites, then every regional elevation model in the catalog
+
+// ---------------- places NASA Trek marks: bookmarks, mission waypoints, traverses, IAU names ----------------
+let placesRenderer = null;
+const NAME_ZOOM = { Crater: 10, Mons: 7, Tholus: 9, Patera: 8, Vallis: 8, Planitia: 5, Planum: 6, Terra: 5, "Albedo Feature": 5, Chasma: 7, Fossa: 8, Labyrinthus: 7 };
+const placeZoom = (kind) => NAME_ZOOM[kind] || 8;
+// click a marked place: start, end or checkpoint there
+function placePopup(p) {
+  if (NAV) return;
+  const html = `<div class="pop-read"><b>${esc(p.name)}</b><br><span class="muted">${esc(p.sub)}</span><br>${coordTxt(p)}</div>
+    <div class="pop-btns"><button data-act="start"><span class="dot start"></span>Start here</button><button data-act="end"><span class="dot end"></span>Make this the destination</button>${S.start && S.end ? '<button data-act="cp"><span class="dot cp"></span>Add as checkpoint</button>' : ""}</div>`;
+  const pop = L.popup({ maxWidth: 260 }).setLatLng([p.lat, p.lon]).setContent(html).openOn(map);
+  pop.getElement().querySelectorAll("[data-act]").forEach((b) => b.addEventListener("click", () => {
+    map.closePopup();
+    if (setPoint(b.dataset.act, p.lat, p.lon, p.name)) { setPick(b.dataset.act === "start" && !S.end ? "end" : null); changed(); }
+  }));
+}
+const TRAVERSE_COLOR = { "Curiosity traverse": "#ffb347", "Perseverance traverse": "#4aa3ff", "Opportunity traverse": "#c58cff", "Spirit traverse": "#7dffc8", "The Martian (Watney's route)": "#ff6b6b" };
+function missionLayer() {
+  placesRenderer ||= L.canvas({ padding: 0.5 });
+  const g = L.layerGroup();
+  for (const b of PLACES_DATA.bookmarks) if (b.bbox[2] - b.bbox[0] < 60)
+    L.rectangle([[b.bbox[1], b.bbox[0]], [b.bbox[3], b.bbox[2]]], { color: "#ffd479", weight: 1, opacity: 0.55, dashArray: "4 6", fill: false, interactive: false }).addTo(g);
+  for (const t of PLACES_DATA.traverses) for (const part of t.parts)
+    L.polyline(part, { color: TRAVERSE_COLOR[t.name] || "#ffd479", weight: 2.5, opacity: 0.9 }).bindTooltip(esc(t.name), { sticky: true }).addTo(g);
+  for (const [name, mission, lat, lon] of PLACES_DATA.waypoints)
+    L.circleMarker([lat, lon], { radius: 5, color: "#1b0d05", weight: 1.5, fillColor: "#ffd479", fillOpacity: 1, renderer: placesRenderer, bubblingMouseEvents: false })
+      .bindTooltip(`${esc(name)} · ${esc(mission)}`).on("click", () => placePopup({ name, sub: `${mission} · NASA Trek waypoint`, lat, lon })).addTo(g);
+  return g;
+}
+function namesLayer() {
+  placesRenderer ||= L.canvas({ padding: 0.5 });
+  const g = L.layerGroup();
+  for (const [name, lat, lon, kind] of PLACES_DATA.names)
+    L.circleMarker([lat, lon], { radius: 3, color: "#cfd6e4", weight: 1, fillColor: "#cfd6e4", fillOpacity: 0.75, renderer: placesRenderer, bubblingMouseEvents: false })
+      .bindTooltip(`${esc(name)}${kind ? ` · ${esc(kind)}` : ""}`).on("click", () => placePopup({ name, sub: `${kind || "Named feature"} · IAU name`, lat, lon })).addTo(g);
+  return g;
+}
+
+function renderSites() {
+  const bookmarks = PLACES_DATA.bookmarks.map((b) => ({ name: b.name, sub: "NASA Trek bookmark", lat: b.lat, lon: b.lon, zoom: 3,
+    bounds: b.bbox[2] - b.bbox[0] < 60 ? [[b.bbox[1], b.bbox[0]], [b.bbox[3], b.bbox[2]]] : null }));
+  const items0 = [...bookmarks, ...SITES.map((s) => ({ name: s.name, sub: sourceLabel(sourcesFor([s])[0]), lat: s.lat, lon: s.lon, zoom: s.zoom })),
+    ...CATALOG.dems.filter((d) => !SITES.some((s) => sourcesFor([s])[0].id === d.id))
+      .map((d) => ({ name: d.title.replace(/^(MRO|Mars Reconnaissance Orbiter|MEX) (HiRISE|CTX|HRSC),\s*(DEM\s*)?/, "").replace(/,? ?DEM\b,?/, "").trim(), sub: sourceLabel(d),
+        bounds: [[d.bbox[1], d.bbox[0]], [d.bbox[3], d.bbox[2]]] }))];
+  const q = ($("#siteSearch")?.value || "").trim().toLowerCase();
+  let items = items0;
+  if (q) {
+    const all = [...items0, ...PLACES_DATA.waypoints.map(([name, m, lat, lon]) => ({ name, sub: `${m} waypoint`, lat, lon, zoom: 15, pick: true })),
+      ...PLACES_DATA.names.map(([name, lat, lon, k]) => ({ name, sub: `${k || "Named feature"} · IAU`, lat, lon, zoom: placeZoom(k), pick: true }))];
+    const lo = (it) => it.name.toLowerCase();
+    items = [...all.filter((it) => lo(it).startsWith(q)), ...all.filter((it) => !lo(it).startsWith(q) && lo(it).includes(q))].slice(0, 40);
+  }
+  $("#siteList").innerHTML = items.length ? items.map((it, i) => `<button data-i="${i}">${esc(it.name)}<small>${esc(it.sub)}</small></button>`).join("") : '<p class="hint">No marked place by that name.</p>';
+  $$("#siteList button").forEach((b) => b.addEventListener("click", () => {
+    const it = items[+b.dataset.i]; flyToSite(it); if (innerWidth <= 760) closeDrawer();
+    if (it.pick) setTimeout(() => placePopup(it), 1300);   // a single point: offer start / destination
+  }));
+}
+function flyToSite(it) { if (it.bounds) map.flyToBounds(it.bounds, { duration: 1.2 }); else map.flyTo([it.lat, it.lon], it.zoom || 11, { duration: 1.2 }); }
 function renderLegend() {
   $("#mapLegend").innerHTML = layerDefs.overlays.filter((d) => d.legend && map.hasLayer(d.layer)).map((d) => {
     const [n, g, a, z] = d.legend;
@@ -128,7 +239,7 @@ function probe(lat, lon) {
   const s = sampleAt(S.site, lat, lon);
   $("#probe").innerHTML = s
     ? `${coordTxt({ lat, lon })}<br>elevation ${fmt(s.elev)} m · slope ${fmt(s.slope, 1)}°<br>rock density ${fmt(s.rough * 100)}% · ${s.nogo ? "<b style='color:#ff7083'>no-go</b>" : `hazard ${fmt(s.hazard * 100)}%`}`
-    : "Outside the mapped area.";
+    : `${coordTxt({ lat, lon })}<br>Not analysed yet: put a route here and its terrain loads. ${sourceLabel(sourcesFor([{ lat, lon }])[0])}.`;
 }
 
 // ---------------- picking points ----------------
@@ -145,13 +256,16 @@ function setPick(kind) {
   $("#fieldStart").classList.toggle("picking", kind === "start");
   $("#fieldEnd").classList.toggle("picking", kind === "end");
   $("#pickBanner").classList.toggle("hidden", !kind);
-  $("#pickText").textContent = kind === "start" ? "Tap the map to set your start point" : kind === "end" ? "Tap the map to set your destination" : "Tap the map where you want a checkpoint";
+  $("#pickText").textContent = U(kind === "start" ? "Tap the map to set your start point" : kind === "end" ? "Tap the map to set your destination" : "Tap the map where you want a checkpoint");
   map?.closePopup();
 }
 
 // make a point object; snaps onto ground that is passable for the current mode
 function makePoint(lat, lon, name) {
-  if (!inSite(S.site, lat, lon)) { toast("That's outside the mapped area. Pick inside the dashed box."); return null; }
+  lon = normLon(lon);
+  if (!inExtent(lat, lon)) { toast("Pick a point between 88°S and 88°N."); return null; }
+  // terrain here isn't loaded yet: keep the point and snap it once the corridor has been analysed
+  if (!inSite(S.site, lat, lon)) return { lat, lon, name: name || null, unchecked: true };
   const prof = profileFor(S.mode, S.opts);
   let k = cellOf(S.site, lat, lon), moved = 0;
   if (!passable(S.site, k, prof)) {
@@ -163,7 +277,7 @@ function makePoint(lat, lon, name) {
   }
   return { lat, lon, name: name || null };
 }
-const pointLabel = (p) => p.name || `${coordTxt(p)} · ${fmt(elevAt(S.site, p.lat, p.lon) ?? 0)} m`;
+const pointLabel = (p) => { if (p.name) return p.name; const e = elevAt(S.site, p.lat, p.lon); return e == null ? coordTxt(p) : `${coordTxt(p)} · ${fmt(e)} m`; };
 
 function setPoint(kind, lat, lon, name) {
   const p = makePoint(lat, lon, name);
@@ -187,7 +301,7 @@ function insertCheckpoint(p) {
 
 function onMapClick(e) {
   if (NAV) return;
-  const { lat, lng } = e.latlng;
+  const lat = e.latlng.lat, lng = normLon(e.latlng.lng);
   if (S.pick) {
     const kind = S.pick;
     if (kind === "cp" && !(S.start && S.end)) return;
@@ -200,9 +314,11 @@ function onMapClick(e) {
   if (!S.end) { if (setPoint("end", lat, lng)) { setPick(null); changed(); } return; }
   // both set: offer actions, like a long-press in a phone navigation app
   const s = sampleAt(S.site, lat, lng);
-  if (!s) return;
-  const hz = horizons(S.site, lat, lng);
-  const html = `<div class="pop-read"><b>${coordTxt({ lat, lon: lng })}</b><br>elev <b>${fmt(s.elev)} m</b> · slope <b>${fmt(s.slope, 1)}°</b><br>rocks <b>${fmt(s.rough * 100)}%</b> · sky open <b>${fmt(skyOpen(hz) * 100)}%</b>${s.nogo ? "<br><b style='color:#ff7083'>No-go ground</b>" : ""}</div>
+  if (!s && !inExtent(lat, lng)) return;
+  const read = s
+    ? `elev <b>${fmt(s.elev)} m</b> · slope <b>${fmt(s.slope, 1)}°</b><br>rocks <b>${fmt(s.rough * 100)}%</b> · sky open <b>${fmt(skyOpen(horizons(S.site, lat, lng)) * 100)}%</b>${s.nogo ? "<br><b style='color:#ff7083'>No-go ground</b>" : ""}`
+    : "Not analysed yet. Terrain loads when a route uses it.";
+  const html = `<div class="pop-read"><b>${coordTxt({ lat, lon: lng })}</b><br>${read}</div>
     <div class="pop-btns"><button data-act="cp"><span class="dot cp"></span>Add checkpoint here</button><button data-act="end"><span class="dot end"></span>Make this the destination</button><button data-act="start"><span class="dot start"></span>Make this the start</button></div>`;
   sitePopup = L.popup({ maxWidth: 260 }).setLatLng(e.latlng).setContent(html).openOn(map);
   sitePopup.getElement().querySelectorAll("[data-act]").forEach((b) => b.addEventListener("click", () => {
@@ -213,7 +329,7 @@ function onMapClick(e) {
 
 // ---------------- route card ----------------
 function renderCard() {
-  const set = (el, p) => { el.textContent = p ? pointLabel(p) : "Tap to choose on the map"; el.classList.toggle("placeholder", !p); };
+  const set = (el, p) => { el.textContent = p ? pointLabel(p) : U("Tap to choose on the map"); el.classList.toggle("placeholder", !p); };
   set($("#rcFrom"), S.start); set($("#rcTo"), S.end);
   const list = $("#cpList");
   list.innerHTML = "";
@@ -240,6 +356,7 @@ function pinIcon(kind, label = "") {
   return L.divIcon({ className: "", html: `<div class="pin-${kind}" style="width:${size}px;height:${size}px">${label}</div>`, iconSize: [size, size], iconAnchor: [size / 2, size / 2] });
 }
 function renderMarkers() {
+  sync3d();
   markerGroup.clearLayers();
   const add = (p, kind, label, title, onMove) => {
     const m = L.marker([p.lat, p.lon], { icon: pinIcon(kind, label), draggable: !NAV, zIndexOffset: kind === "cp" ? 500 : 800, autoPan: true }).addTo(markerGroup);
@@ -255,15 +372,65 @@ function renderMarkers() {
 let planTimer = 0, planSeq = 0;
 function changed() {
   save(); renderCard(); renderMarkers();
-  if (!(S.start && S.end)) { clearRoute(); return; }
+  if (!(S.start && S.end)) { planSeq++; clearTimeout(planTimer); buildAbort?.abort(); S.busy = false; $("#computing").classList.add("hidden"); $("#sheet").classList.remove("busy"); clearRoute(); return; }
   S.busy = true; $("#computing").classList.remove("hidden"); $("#sheet").classList.add("busy");
   clearTimeout(planTimer);
   const id = ++planSeq;
-  planTimer = setTimeout(() => { if (id === planSeq) plan(); }, 120);
+  planTimer = setTimeout(() => { if (id === planSeq) prepareAndPlan(id); }, 120);
+}
+
+// make sure the terrain grid covers every point (load a corridor from Trek if needed), snap points, then plan
+let buildAbort = null;
+async function prepareAndPlan(id) {
+  if (!(S.start && S.end)) return;
+  const pts = [S.start, ...S.cps, S.end];
+  const fail = (msg) => {
+    if (id !== planSeq) return;
+    S.busy = false; $("#computing").classList.add("hidden"); $("#computing").textContent = "Finding the safest route…"; $("#sheet").classList.remove("busy");
+    clearRoute(); S.error = msg; renderSheet(); planDone();
+  };
+  // sharpest elevation model covering every point; "high" detail uses finer cells and skips the prebuilt box
+  const detail = S.opts.detail === "high" ? "high" : "standard", hi = detail === "high";
+  const srcs = sourcesFor(pts);
+  // reuse the current grid only if it isn't much bigger than this route needs (a big grid has coarser cells
+  // and may have skipped rock density)
+  const want = corridorFor(pts, srcs[0]), area = (b) => (b.east - b.west) * (b.north - b.south);
+  const reuse = S.site !== S.baseSite && S.site.live && covers(S.site, pts) && S.site.detail === detail && S.site.source.id === srcs[0].id
+    && area(S.site.bbox) <= 4 * area(want);
+  if (!hi && covers(S.baseSite, pts)) setSite(S.baseSite);
+  else if (!reuse) {
+    buildAbort?.abort(); const ac = buildAbort = new AbortController();
+    const msg = (t) => { if (id === planSeq) $("#computing").textContent = U(t); };
+    let site = null, lastErr = null;
+    for (const src of srcs) {
+      msg(`Loading ${src.title}…`);
+      try {
+        site = await buildSite(corridorFor(pts, src), src, { signal: ac.signal, maxCells: hi ? 8e6 : 3e6, minCell: hi ? 4 : 8,
+          progress: (d, t) => msg(`Analysing terrain around your route (${src.instrument || "MOLA/HRSC"})… ${Math.round((d / t) * 100)}%`) });
+      } catch (e) { if (ac.signal.aborted || id !== planSeq) return; lastErr = e; site = null; continue; }
+      if (id !== planSeq) return;
+      // every point must sit on ground this model actually covers (bounding boxes include no-data corners)
+      if (pts.every((p) => hasData(site, cellOf(site, p.lat, p.lon)))) break;
+      site = null;
+    }
+    if (!site) return fail(`Couldn't load terrain from NASA Mars Trek${lastErr ? ` (${lastErr.message})` : ""}. Check the connection and try again.`);
+    site.detail = detail;
+    setSite(site);
+    if (site.lowRes) toast(`Only ${Math.round(site.cell_m)} m terrain is available for this route: fine for reconnaissance, not an EVA safety check.`, 6000);
+  }
+  for (const p of pts) if (p.unchecked) {
+    const q = makePoint(p.lat, p.lon, p.name);
+    if (!q) return fail(`No safe ground near ${p.name || coordTxt(p)}.`);
+    delete p.unchecked; Object.assign(p, q);
+  }
+  $("#computing").textContent = U("Finding the safest route…");
+  renderCard(); renderMarkers(); save();
+  plan();
 }
 function clearRoute() {
   S.track = S.mans = S.ana = S.checks = null; S.error = null;
   routeGroup.clearLayers(); dangerGroup.clearLayers();
+  sync3d();
 }
 
 function plan() {
@@ -284,7 +451,7 @@ function plan() {
   };
   const addStop = (p, k) => {
     const dwell = k > 0 && k < order.length - 1 ? (p.dwell || 0) * 60 : 0;
-    stops.push({ idx: pts.length - 1, stop: { name: k === 0 ? "Start" : k === order.length - 1 ? "Destination" : p.name, dwell: dwell / 60, k }, arrive: t, depart: t + dwell });
+    stops.push({ idx: pts.length - 1, stop: { name: k === 0 ? p.name || "Start" : k === order.length - 1 ? p.name || "Destination" : p.name, dwell: dwell / 60, k }, arrive: t, depart: t + dwell });
     t += dwell; pts[pts.length - 1].t = t;
   };
   for (let k = 0; k < order.length; k++) {
@@ -302,7 +469,7 @@ function plan() {
       const out = [];
       for (let i = 1; i < ll.length; i++) {
         const [la0, lo0] = ll[i - 1], [la1, lo1] = ll[i];
-        const n = Math.max(1, Math.ceil(distM(ll[i - 1], ll[i]) / 5));
+        const n = Math.max(1, Math.ceil(distM(ll[i - 1], ll[i]) / Math.max(5, site.cell_m / 2)));
         for (let j = 1; j <= n; j++) out.push([la0 + ((la1 - la0) * j) / n, lo0 + ((lo1 - lo0) * j) / n]);
       }
       return out;
@@ -321,7 +488,7 @@ function plan() {
     S.error = err.kind === "blocked"
       ? `No safe ${S.mode === "drive" ? "drivable" : "walkable"} path reaches ${leg}: it's cut off by ground steeper than ${prof.maxSlope}°${S.mode === "drive" ? " or too rocky for the rover" : ""}.`
       : `No safe ground near ${err.kind === "start" ? "the start" : leg}.`;
-    renderSheet(); return;
+    renderSheet(); planDone(); return;
   }
   S.error = null;
   const track = { kind: S.mode, pts, stops, total: { dist: pts[pts.length - 1].dist, time: t } };
@@ -335,6 +502,41 @@ function plan() {
   for (const n of notes) S.checks.push({ lvl: "warn", title: "Point moved to usable ground", sub: n });
   renderRoute(); renderSheet();
   if (!$("#drawer").classList.contains("open") || $("#drawer").dataset.pane === "report" || $("#drawer").dataset.pane === "steps") renderPanes();
+  planDone();
+}
+
+// ---------------- route requests from the voice assistant ----------------
+// spec: { start?, end?, cps?, addCp?, mode?, autoStart?, navIntro? }  points are {lat, lon, name};
+// a key left out keeps the current value. cb gets { ok, error?, need? } once the plan is finished.
+let planCb = null;
+function planDone() { sync3d(); const f = planCb; planCb = null; f?.({ ok: !!S.track && !S.error, error: S.error }); }
+function routeTo(spec, cb) {
+  const wasNav = !!NAV;
+  if (NAV) endNav();
+  if (spec.mode) S.mode = spec.mode;
+  const mk = (p) => { const q = makePoint(p.lat, p.lon, p.name); if (!q) throw new Error(`No safe ground near ${p.name || "that spot"}.`); return q; };
+  try {
+    if (spec.start !== undefined) S.start = spec.start && mk(spec.start);
+    if (spec.end !== undefined) S.end = spec.end && mk(spec.end);
+    if (spec.cps !== undefined) S.cps = spec.cps.map((p) => { const q = mk(p); q.id = cpSeq++; q.dwell = S.opts.checkpointMin; return q; });
+    if (spec.addCp) { if (!(S.start && S.end)) throw new Error("Set a start and a destination before adding a checkpoint."); insertCheckpoint(mk(spec.addCp)); }
+  } catch (e) { changed(); cb?.({ ok: false, error: e.message }); return; }
+  setPick(null);
+  if (!(S.start && S.end)) { changed(); setPick(S.start ? "end" : "start"); cb?.({ ok: false, need: S.start ? "end" : "start" }); return; }
+  planCb = (res) => {
+    if (res.ok) {
+      if (spec.autoStart || wasNav) startNav(spec.navIntro);
+      else map.fitBounds(L.latLngBounds(S.track.pts.map((p) => [p.lat, p.lon])), { paddingTopLeft: [innerWidth > 760 ? 420 : 30, 60], paddingBottomRight: [40, innerWidth > 760 ? 40 : 300] });
+    }
+    cb?.({ ...res, navigating: !!NAV });
+  };
+  changed();
+}
+function planSummary() {
+  if (!S.track) return null;
+  const t = S.track.total, worst = S.checks.find((c) => c.lvl === "bad") || S.checks.find((c) => c.lvl === "warn");
+  return { from: S.start?.name || "the start", to: S.end?.name || "the destination", dist: t.dist, time: t.time, arrive: startSec() + t.time,
+    checkpoints: S.cps.map((c) => c.name), status: worst ? worst.title : "All checks passed", checks: S.checks.map((c) => ({ level: c.lvl, title: c.title, detail: c.sub })), mode: S.mode };
 }
 
 // ---------------- analysis: dangers, shielding, sunlight ----------------
@@ -371,7 +573,8 @@ function analyse(tr) {
   }
   // samples every 25 m: sky view (terrain shielding) and sun / shadow at the time you pass
   const samples = [];
-  for (let d = 0; ; d += 25) {
+  const step = Math.max(25, site.cell_m, tr.total.dist / 400);
+  for (let d = 0; ; d += step) {
     const i = idxAtDist(pts, Math.min(d, tr.total.dist)), p = pts[i];
     const hz = horizons(site, p.lat, p.lon);
     const sun = sunAt((t0 + p.t) / 3600, today);
@@ -418,7 +621,7 @@ function analyse(tr) {
   for (const p of pts) { emin = Math.min(emin, p.elev); emax = Math.max(emax, p.elev); smax = Math.max(smax, p.slope); }
   const skyAvg = samples.reduce((s, x) => s + x.sky, 0) / samples.length;
   const shadeFrac = samples.filter((s) => s.shade).length / samples.length;
-  return { back, samples, shelter, dangers: D, emin, emax, smax, skyAvg, shadeFrac, day: daylight(today), Ls: sunAt(12, today).Ls };
+  return { step, back, samples, shelter, dangers: D, emin, emax, smax, skyAvg, shadeFrac, day: daylight(today), Ls: sunAt(12, today).Ls };
 }
 
 function assess(tr, A) {
@@ -448,6 +651,10 @@ function assess(tr, A) {
   const sh = A.shelter;
   C.push({ lvl: "ok", title: `Radiation shielding: sky ${fmt(A.skyAvg * 100)}% open on average`,
     sub: sh ? `Most sheltered spot near the route: ${fmt(sh.sky * 100)}% sky open, ${sh.off ? `${fmt(sh.off)} m off the route` : "on the route"} at ${distTxt(sh.d)}. Use it if a solar particle event is called.` : "" });
+  const site = S.site;
+  if (site.lowRes) C.unshift({ lvl: walk ? "bad" : "warn", title: `Reconnaissance only: ${fmt(site.cell_m)} m terrain`,
+    sub: `No sharp elevation model covers this route, so it uses ${sourceLabel(site.source)}. Cliffs, scarps and boulder fields smaller than a few hundred metres don't show at this scale: not an EVA safety check.` });
+  else if (site.live && !site.rock) C.push({ lvl: "warn", title: "Rock density not assessed", sub: "No HiRISE image mosaic covers this ground, so only slope is checked. Watch for boulders and ridges." });
   return C;
 }
 
@@ -473,25 +680,38 @@ function renderRoute() {
     .bindTooltip(`<b>Best radiation shelter</b><br>${fmt(sh.sky * 100)}% of the sky open: surrounding terrain blocks the rest`, { direction: "top" }).addTo(dangerGroup);
 }
 
+// terrain detail used for this route, with a button to analyse the route corridor more finely
+function renderDetail() {
+  const el = $("#sumDetail"), site = S.site;
+  if (!el) return;
+  const src = site.live ? `${site.source.instrument || "MOLA+HRSC"} ${site.source.pxM < 10 ? site.source.pxM.toFixed(1) : Math.round(site.source.pxM)} m data` : "HiRISE 1 m DEM (prebuilt)";
+  const canRefine = S.opts.detail !== "high" && (!site.live || site.cell_m > Math.max(4, Math.round(site.source.pxM)));
+  const ko = KOUI(), srcK = ko ? src.replace(/ data$/, " 데이터").replace("(prebuilt)", "(사전 제작)") : src;
+  el.innerHTML = `<span class="det ${site.lowRes ? "low" : ""}">${ko ? "지형" : "Terrain"}: ${fmt(site.cell_m)} m ${ko ? "격자" : "grid"} · ${esc(srcK)}${site.lowRes ? (ko ? " · 정찰용 전용" : " · reconnaissance only") : ""}</span>${canRefine ? `<button class="link-btn" id="btnRefine" title="Re-analyse the ground along this route on a finer grid">${ko ? "경로 지형 정밀 분석" : "Refine route terrain"}</button>` : S.opts.detail === "high" ? `<button class="link-btn" id="btnStd">${ko ? "기본 정밀도" : "Standard detail"}</button>` : ""}`;
+  $("#btnRefine")?.addEventListener("click", () => { S.opts.detail = "high"; $("#inDetail").value = "high"; changed(); });
+  $("#btnStd")?.addEventListener("click", () => { S.opts.detail = "standard"; $("#inDetail").value = "standard"; changed(); });
+}
 function renderSheet() {
   const st = $("#statusBtn");
   if (S.error) {
-    $("#sumTime").textContent = "No route"; $("#sumTime").className = "sum-time bad";
-    $("#sumDist").textContent = ""; $("#sumSub").textContent = "Move the start, destination or a checkpoint, or relax the limits in Settings.";
-    st.className = "status bad"; $("#statusText").textContent = S.error; $("#checks").innerHTML = "";
+    $("#sumTime").textContent = U("No route"); $("#sumTime").className = "sum-time bad";
+    $("#sumDist").textContent = ""; $("#sumSub").textContent = U("Move the start, destination or a checkpoint, or relax the limits in Settings.");
+    st.className = "status bad"; $("#statusText").textContent = U(S.error); $("#checks").innerHTML = "";
     $("#btnStart").disabled = true; $("#profileSvg").innerHTML = ""; $("#profileInfo").textContent = ""; return;
   }
   if (!S.track) return;
   const tot = S.track.total, C = S.checks;
   const worst = C.some((c) => c.lvl === "bad") ? "bad" : C.some((c) => c.lvl === "warn") ? "warn" : "ok";
-  $("#sumTime").textContent = dur(tot.time); $("#sumTime").className = `sum-time ${worst === "ok" ? "" : worst}`;
+  $("#sumTime").textContent = U(dur(tot.time)); $("#sumTime").className = `sum-time ${worst === "ok" ? "" : worst}`;
   $("#sumDist").textContent = distTxt(tot.dist);
   const ncp = S.cps.length;
-  $("#sumSub").textContent = `${S.mode === "drive" ? "Drive" : "Walk"} · arrive ${hhmm(startSec() + tot.time)} LMST · ↑${fmt(tot.ascent)} m ↓${fmt(tot.descent)} m${ncp ? ` · ${ncp} checkpoint${ncp > 1 ? "s" : ""}` : ""}`;
+  $("#sumSub").textContent = U(`${S.mode === "drive" ? "Drive" : "Walk"} · arrive ${hhmm(startSec() + tot.time)} LMST · ↑${fmt(tot.ascent)} m ↓${fmt(tot.descent)} m${ncp ? ` · ${ncp} checkpoint${ncp > 1 ? "s" : ""}` : ""}`);
+  renderDetail();
   st.className = `status ${worst}`;
   const nb = C.filter((c) => c.lvl !== "ok").length;
-  $("#statusText").textContent = worst === "ok" ? "Safe to go: all checks passed" : worst === "warn" ? `Go with caution: ${nb} thing${nb > 1 ? "s" : ""} to watch` : `Not safe as planned: ${C.find((c) => c.lvl === "bad").title.toLowerCase()}`;
-  $("#checks").innerHTML = C.map((c) => `<div class="check ${c.lvl}"><span class="ic">${c.lvl === "ok" ? "✓" : c.lvl === "warn" ? "!" : "✕"}</span><span>${esc(c.title)}<small>${esc(c.sub)}</small></span></div>`).join("");
+  $("#statusText").textContent = KOUI() && worst === "bad" ? `현재 계획은 위험: ${uiKo(C.find((c) => c.lvl === "bad").title)}`
+    : U(worst === "ok" ? "Safe to go: all checks passed" : worst === "warn" ? `Go with caution: ${nb} thing${nb > 1 ? "s" : ""} to watch` : `Not safe as planned: ${C.find((c) => c.lvl === "bad").title.toLowerCase()}`);
+  $("#checks").innerHTML = C.map((c) => `<div class="check ${c.lvl}"><span class="ic">${c.lvl === "ok" ? "✓" : c.lvl === "warn" ? "!" : "✕"}</span><span>${esc(U(c.title))}<small>${esc(U(c.sub))}</small></span></div>`).join("");
   $("#btnStart").disabled = false;
   renderProfile();
 }
@@ -597,9 +817,9 @@ function renderPanes() {
 }
 
 function renderAbout() {
-  const d = S.site.dem_scale;
+  const d = S.baseSite.dem_scale;   // the 8-bit scale disclosure is about the prebuilt box
   $("#aboutBody").innerHTML = `
-    <h3>The site</h3><p>${esc(ABOUT_SITE)} The mapped box is ${fmt((S.site.nx * S.site.cell_m) / 1000, 1)} × ${fmt((S.site.ny * S.site.cell_m) / 1000, 1)} km, on an ${S.site.cell_m} m planning grid. Context: NASA's <a href="https://science.nasa.gov/resource/curiositys-proposed-path-up-mount-sharp/" target="_blank" rel="noopener">Curiosity's proposed path up Mount Sharp</a>.</p>
+    <h3>The site</h3><p>${esc(ABOUT_SITE)} Routes can be planned anywhere on Mars. Dotted outlines mark the ${CATALOG.dems.length} regions where Trek has a sharp regional elevation model (green: HiRISE ~1 m, purple: CTX / HRSC); elsewhere only the global 200 m blend exists, which is good for reconnaissance but can't show cliffs or boulder fields. The orange dashed box is the ground analysed for the current route: ${fmt((S.site.nx * S.site.cell_m) / 1000, 1)} × ${fmt((S.site.ny * S.site.cell_m) / 1000, 1)} km on a ${fmt(S.site.cell_m)} m grid from ${S.site.live ? `${esc(sourceLabel(S.site.source))}${S.site.rock ? `, rock density from ${esc(S.site.rock.mosaic)}` : ", rock density not assessed (no HiRISE mosaic)"}` : "the prebuilt lower Mount Sharp data"}. Context: NASA's <a href="https://science.nasa.gov/resource/curiositys-proposed-path-up-mount-sharp/" target="_blank" rel="noopener">Curiosity's proposed path up Mount Sharp</a>.</p>
     <h3>How a route is planned</h3><ul>
       <li>A* search over the grid finds the quickest path, with extra cost near steep or rocky ground (the <i>route preference</i> setting).</li>
       <li>Crew on foot: no ground steeper than ${S.opts.maxSlope}°; walking speed from Tobler's hiking function, slowed by rocks.</li>
@@ -608,10 +828,11 @@ function renderAbout() {
     <h3>Data used: NASA Mars Trek only</h3><ul>
       <li><b>HiRISE mosaic</b> of Curiosity's roving site (MRO, ~25 cm/px): rock and ridge density from image texture.</li>
       <li><b>HiRISE Gale crater DEM</b>: elevation, slope, terrain horizons (shadow and sky-view).</li>
+      <li>Anywhere else on Mars, the app picks the sharpest elevation model Trek has for your route (${CATALOG.dems.length} regional HiRISE / CTX / HRSC models, outlined on the map; otherwise the global MOLA + HRSC 200 m blend) and analyses a corridor around the route in the browser. Metres come from Trek's elevation services where they exist; for models served only as 8-bit tiles, a metre scale was fitted against the global blend. Rock density uses HiRISE image texture where a HiRISE mosaic covers the ground.</li>
       <li>CTX, Viking, MOLA, THEMIS and TES layers as map context.</li>
       <li>Sun position: the published Mars24 algorithm (Allison &amp; McEwen 2000), no data feed.</li></ul>
     <h3>Elevation scale (disclosure)</h3><p>Trek serves the HiRISE DEM as 8-bit display tiles, not metres. We convert with <code>metres = ${d.a} × DN ${d.b < 0 ? "−" : "+"} ${Math.abs(d.b)}</code>, fitted once against Curiosity's published traverse elevations (RMS ${d.rms_m} m). No Curiosity data is shipped or shown in the app; slopes, shadows and shielding don't depend on the constant, only the absolute heights do.</p>
-    <h3>Not used</h3><p>The Mars 2020 raw-image feed and the USGS Astrogeology interactive maps were reviewed. This build stays at Gale crater and draws a synthetic 3D terrain view instead of rover photos.</p>
+    <h3>Not used</h3><p>The Mars 2020 raw-image feed was reviewed; this build stays at Gale crater and draws a synthetic 3D terrain view instead of rover photos. The USGS global geologic map of Mars (Tanaka et al. 2014, SIM 3292, 1:20,000,000) was checked through its ArcGIS feature service: the whole 36 × 40 km planning area falls in just two map units (Amazonian–Hesperian impact unit and Hesperian transition unit), so it can't tell one route from another. No Gale-scale USGS geologic map was found on the Astrogeology hub.</p>
     <h3>Limits</h3><ul><li>Planning aid for a concept study, not flight software.</li><li>Features smaller than a few metres (single rocks, sand ripples) are not in the slope grid.</li><li>Radiation shown as relative terrain shielding only, no dose.</li></ul>`;
 }
 
@@ -624,6 +845,8 @@ function bindSettings() {
   const sync = () => { for (const [i, out, k, f] of rng) { $(i).value = o[k]; $(out).textContent = f(o[k]); } $("#inStart").value = o.startLMST; };
   for (const [i, out, k, f] of rng) $(i).addEventListener("input", (e) => { o[k] = +e.target.value; $(out).textContent = f(o[k]); changed(); });
   $("#inStart").addEventListener("change", (e) => { o.startLMST = e.target.value || "09:00"; changed(); });
+  $("#inDetail").value = o.detail === "high" ? "high" : "standard";
+  $("#inDetail").addEventListener("change", (e) => { o.detail = e.target.value; changed(); });
   $("#btnReset").addEventListener("click", () => { Object.assign(o, DEFAULTS); S.start = S.end = null; S.cps = []; sync(); setPick("start"); changed(); closeDrawer(); });
   sync();
 }
@@ -637,7 +860,7 @@ function live(t) {
   const mi = S.mans.indexOf(man), after = S.mans[mi + 1];
   const distTo = man ? Math.max(0, man.d - st.dist) : 0;
   const lmst = startSec() + t;
-  const smp = A.samples[Math.min(A.samples.length - 1, Math.round(st.dist / 25))];
+  const smp = A.samples[Math.min(A.samples.length - 1, Math.round(st.dist / A.step))];
   const sun = sunAt(lmst / 3600, new Date());
   const shade = sun.el <= 0 || horizonToward(smp.hz, sun.az) > sun.el;
   const i = st.i, f = pts[i + 1] ? (st.dist - pts[i].dist) / Math.max(1e-6, pts[i + 1].dist - pts[i].dist) : 0;
@@ -663,12 +886,13 @@ function live(t) {
   if (walk && out.margin < 0) out.alert = "Turn back now: not enough oxygen left to walk back with reserve";
   else if (walk && out.margin < 1800) out.alert = `Walk-back margin ${dur(out.margin)}: plan to turn back soon`;
   else if (slopeAhead > (walk ? 20 : o.roverMaxSlope * 0.85)) out.alert = `Steep ground ahead: ${fmt(slopeAhead)}°`;
-  else if (sun.el > 0 && shade && !A.samples[Math.max(0, Math.round(st.dist / 25) - 2)].shade) out.alert = "Entering terrain shadow: colder, check footing";
+  else if (sun.el > 0 && shade && !A.samples[Math.max(0, Math.round(st.dist / A.step) - 2)].shade) out.alert = "Entering terrain shadow: colder, check footing";
   return out;
 }
 
-function startNav() {
+function startNav(intro) {
   if (!S.track) return;
+  if (typeof intro !== "string" && intro !== false) intro = undefined; // click events pass an Event
   closeDrawer(); setPick(null); map.closePopup();
   NAV = { t: 0, playing: true, rate: +$("#navRate").value, follow: true, lastTs: 0, lastDom: 0 };
   $("#planView").classList.add("hidden"); $("#navView").classList.remove("hidden");
@@ -678,10 +902,12 @@ function startNav() {
   map.setView([S.start.lat, S.start.lon], 17.5);
   document.body.classList.add("navigating");
   $("#navScrub").value = 0;
+  voiceNavStart(live(0), intro);
   requestAnimationFrame(navLoop);
 }
 function endNav() {
   if (hudIsOpen()) closeHud();
+  voiceNavEnd(); clear3dPos();
   NAV = null; document.body.classList.remove("navigating"); meMarker?.remove(); meMarker = null; doneLine?.setLatLngs([]);
   $("#navView").classList.add("hidden"); $("#planView").classList.remove("hidden"); $(".map-legend").classList.remove("hidden");
   renderMarkers();
@@ -706,6 +932,8 @@ function navLoop(ts) {
   if (NAV.follow) map.setView([Lv.st.lat, Lv.st.lon], map.getZoom(), { animate: false });
   if (ts - NAV.lastDom > 100) { NAV.lastDom = ts; renderNav(Lv); }
   if (hudIsOpen()) updateHud(Lv);
+  if (is3dOpen()) pos3d(Lv.st.lat, Lv.st.lon);
+  voiceTick(Lv);
   requestAnimationFrame(navLoop);
 }
 function renderNav(Lv) {
@@ -713,19 +941,25 @@ function renderNav(Lv) {
   doneLine.setLatLngs(tr.pts.slice(0, Lv.st.i + 1).map((p) => [p.lat, p.lon]).concat([[Lv.st.lat, Lv.st.lon]]));
   const banner = $("#navBanner");
   banner.className = `nav-banner ${Lv.disp.m?.type === "steep" ? "steep" : Lv.disp.m?.type === "arrive" || Lv.done ? "arrive" : ""}`;
-  if (Lv.done) { $("#navIco").innerHTML = maneuverIcon({ type: "arrive" }, 46); $("#navDist").textContent = "Arrived"; $("#navMain").textContent = tr.kind === "drive" ? "Park and level the rover" : "You have arrived"; $("#navSub").textContent = `${hhmm(Lv.lmst)} LMST`; }
-  else if (Lv.st.dwell > 0) { $("#navIco").innerHTML = maneuverIcon({ type: "arrive" }, 46); $("#navDist").textContent = `${dur(Lv.station?.left ?? 0)} left`; $("#navMain").textContent = `At ${tr.stops[Lv.st.dwell].stop.name}`; $("#navSub").textContent = "Checkpoint stop"; }
-  else { $("#navIco").innerHTML = maneuverIcon(Lv.disp.m, 46); $("#navDist").textContent = distTxt(Lv.distTo); $("#navMain").textContent = Lv.disp.text; $("#navSub").textContent = Lv.disp.sub; }
+  const ko = KOUI();
+  if (Lv.done) { $("#navIco").innerHTML = maneuverIcon({ type: "arrive" }, 46); $("#navDist").textContent = ko ? "도착" : "Arrived"; $("#navMain").textContent = ko ? (tr.kind === "drive" ? "로버를 세우고 수평을 맞추세요" : "도착했습니다") : tr.kind === "drive" ? "Park and level the rover" : "You have arrived"; $("#navSub").textContent = `${hhmm(Lv.lmst)} LMST`; }
+  else if (Lv.st.dwell > 0) { $("#navIco").innerHTML = maneuverIcon({ type: "arrive" }, 46); $("#navDist").textContent = ko ? `${navKo.dur(Lv.station?.left ?? 0)} 남음` : `${dur(Lv.station?.left ?? 0)} left`; $("#navMain").textContent = ko ? `${tr.stops[Lv.st.dwell].stop.name}에 정지 중` : `At ${tr.stops[Lv.st.dwell].stop.name}`; $("#navSub").textContent = ko ? "체크포인트 정지" : "Checkpoint stop"; }
+  else {
+    $("#navIco").innerHTML = maneuverIcon(Lv.disp.m, 46); $("#navDist").textContent = distTxt(Lv.distTo);
+    const k = !ko ? Lv.disp : /^Continue /.test(Lv.disp.text) ? navKo.cont(Lv.disp.text.replace(/^Continue /, ""), Lv.man?.text) : navKo.man(Lv.disp.text, Lv.disp.sub);
+    $("#navMain").textContent = k.text; $("#navSub").textContent = k.sub;
+  }
   const then = $("#navThen");
-  if (Lv.after && !Lv.done && Lv.disp.m === m && Lv.after.d - (m?.d ?? 0) < 60) { then.classList.remove("hidden"); then.innerHTML = `Then ${maneuverIcon(Lv.after, 18)} ${esc(Lv.after.text)}`; } else then.classList.add("hidden");
-  $("#navAlert").classList.toggle("hidden", !Lv.alert); $("#navAlert").textContent = Lv.alert ? `⚠ ${Lv.alert}` : "";
-  $("#navEta").textContent = `${hhmm(Lv.arrive)} arrival`;
-  $("#navRemain").textContent = `${dur(Lv.remainTime)} · ${distTxt(Lv.remainDist)} to go`;
+  if (Lv.after && !Lv.done && Lv.disp.m === m && Lv.after.d - (m?.d ?? 0) < 60) { then.classList.remove("hidden"); then.innerHTML = `${ko ? "다음" : "Then"} ${maneuverIcon(Lv.after, 18)} ${esc(ko ? navKo.man(Lv.after.text).text : Lv.after.text)}`; } else then.classList.add("hidden");
+  $("#navAlert").classList.toggle("hidden", !Lv.alert); $("#navAlert").textContent = Lv.alert ? `⚠ ${ko ? navKo.alert(Lv.alert) : Lv.alert}` : "";
+  $("#navEta").textContent = ko ? `${hhmm(Lv.arrive)} 도착` : `${hhmm(Lv.arrive)} arrival`;
+  $("#navRemain").textContent = ko ? `${navKo.dur(Lv.remainTime)} · ${distTxt(Lv.remainDist)} 남음` : `${dur(Lv.remainTime)} · ${distTxt(Lv.remainDist)} to go`;
   const v = (k, val, lvl = "") => `<div class="vital ${lvl}">${k}<b>${val}</b></div>`;
   $("#navVitals").innerHTML = (Lv.walk
-    ? v("O₂ left", dur(Lv.o2Left), Lv.o2Left < S.opts.reserveHours * 3600 ? "bad" : "") + v("Walk-back margin", dur(Lv.margin), Lv.margin < 0 ? "bad" : Lv.margin < 1800 ? "warn" : "")
-    : v("Speed", `${fmt(Lv.speed, 1)} km/h`) + v("Tilt", `${fmt(Lv.st.p.slope)}° / ${S.opts.roverMaxSlope}°`, Lv.st.p.slope > S.opts.roverMaxSlope * 0.85 ? "warn" : ""))
-    + v("Elevation", `${fmt(Lv.st.p.elev)} m`) + v("Sky open", `${fmt(Lv.sky * 100)}%`) + v("Sun", Lv.sun.el <= 0 ? "below horizon" : Lv.shade ? "in shadow" : `${fmt(Lv.sun.el)}° ${compassWord(Lv.sun.az)}`, Lv.shade ? "warn" : "");
+    ? v(ko ? "산소 잔량" : "O₂ left", ko ? navKo.dur(Lv.o2Left) : dur(Lv.o2Left), Lv.o2Left < S.opts.reserveHours * 3600 ? "bad" : "") + v(ko ? "귀환 여유" : "Walk-back margin", ko ? navKo.dur(Lv.margin) : dur(Lv.margin), Lv.margin < 0 ? "bad" : Lv.margin < 1800 ? "warn" : "")
+    : v(ko ? "속도" : "Speed", `${fmt(Lv.speed, 1)} km/h`) + v(ko ? "기울기" : "Tilt", `${fmt(Lv.st.p.slope)}° / ${S.opts.roverMaxSlope}°`, Lv.st.p.slope > S.opts.roverMaxSlope * 0.85 ? "warn" : ""))
+    + v(ko ? "고도" : "Elevation", `${fmt(Lv.st.p.elev)} m`) + v(ko ? "하늘 개방" : "Sky open", `${fmt(Lv.sky * 100)}%`)
+    + v(ko ? "태양" : "Sun", Lv.sun.el <= 0 ? (ko ? "지평선 아래" : "below horizon") : Lv.shade ? (ko ? "그늘" : "in shadow") : `${fmt(Lv.sun.el)}° ${ko ? navKo.dir(compassWord(Lv.sun.az)) : compassWord(Lv.sun.az)}`, Lv.shade ? "warn" : "");
   $("#navScrub").value = Math.round((Lv.t / tr.total.time) * 1000);
   // checkpoint card with a 3D look ahead
   const card = $("#navStation");
@@ -751,11 +985,11 @@ function hudApi() {
 
 // ---------------- help ----------------
 const HELP = [
-  ["Pick your start", "Tap the map where the EVA begins (a green dot). The dashed box is the area mapped in 3D from HiRISE.", '<svg width="80" height="80" viewBox="0 0 80 80"><circle cx="40" cy="40" r="14" fill="#2fd68f" stroke="#fff" stroke-width="5"/></svg>'],
+  ["Pick your start", "Tap the map where the EVA begins (a green dot), anywhere on Mars. Dotted outlines mark sharp HiRISE / CTX elevation models; the terrain around your route is analysed when you choose it. Use Layers → Go to a site to jump to Jezero, Gale, Columbia Hills and more. Or tap the mic and say “route from the landing plain to the upper boxwork ridges”.", '<svg width="80" height="80" viewBox="0 0 80 80"><circle cx="40" cy="40" r="14" fill="#2fd68f" stroke="#fff" stroke-width="5"/></svg>'],
   ["Pick your destination", "Tap again for where you're going. The navigator finds the safest route around steep slopes and rock fields, colour-coded by slope.", '<svg width="200" height="80" viewBox="0 0 200 80"><path d="M20 60 C70 60 70 20 120 25 S170 30 180 20" stroke="#2fd68f" stroke-width="7" fill="none"/><circle cx="20" cy="60" r="8" fill="#2fd68f" stroke="#fff" stroke-width="3"/><circle cx="180" cy="20" r="8" fill="#e9354f" stroke="#fff" stroke-width="3"/></svg>'],
   ["Read the safety check", "Time, distance, oxygen walk-back margin, daylight, steep or rocky stretches, terrain shadow and radiation shielding. Open the report to see each danger on the map.", '<svg width="80" height="80" viewBox="0 0 80 80"><path d="M40 8 70 66H10z" fill="none" stroke="#f5c84b" stroke-width="6" stroke-linejoin="round"/><path d="M40 30v18M40 56v2" stroke="#f5c84b" stroke-width="6" stroke-linecap="round"/></svg>'],
   ["Checkpoints when you want them", "Tap the map once a route exists, or use “+ Add checkpoint”, to add a stop. Name it, set how long you'll stay, drag to move.", '<svg width="80" height="80" viewBox="0 0 80 80"><circle cx="40" cy="40" r="14" fill="#e8743b" stroke="#fff" stroke-width="4"/><text x="40" y="46" text-anchor="middle" font-family="monospace" font-weight="700" font-size="16" fill="#fff">1</text></svg>'],
-  ["Start navigating", "Press Start for turn-by-turn guidance, or HUD for the helmet display with a 3D view of the terrain ahead.", '<svg width="80" height="80" viewBox="0 0 24 24"><path d="M12 2 4 21l8-4 8 4z" fill="#2fd68f"/></svg>'],
+  ["Start navigating", "Press Start for spoken turn-by-turn guidance, or HUD for the helmet display with a 3D view of the terrain ahead. Tap the mic (or press V) to ask the voice assistant about oxygen, the next turn or the nearest shelter.", '<svg width="80" height="80" viewBox="0 0 24 24"><path d="M12 2 4 21l8-4 8 4z" fill="#2fd68f"/></svg>'],
 ];
 let helpK = 0;
 function showHelp(k = 0) {
@@ -787,6 +1021,9 @@ function bindControls() {
   $$("[data-open]").forEach((b) => b.addEventListener("click", () => { const d = $("#drawer"); d.classList.contains("open") && d.dataset.pane === b.dataset.open ? closeDrawer() : openDrawer(b.dataset.open); }));
   $("#drawerClose").addEventListener("click", closeDrawer);
   $("#btnHelp").addEventListener("click", () => showHelp(0));
+  $("#view2d").addEventListener("click", () => setView("2d"));
+  $("#view3d").addEventListener("click", () => setView("3d"));
+  $$("[data-view]").forEach((b) => b.addEventListener("click", () => { setView(b.dataset.view); if (innerWidth <= 760) closeDrawer(); }));
   $("#helpSkip").addEventListener("click", hideHelp);
   $("#helpNext").addEventListener("click", () => (helpK < HELP.length - 1 ? showHelp(helpK + 1) : hideHelp()));
   // navigation controls
@@ -802,6 +1039,7 @@ function bindControls() {
     else if (NAV && e.key === " ") { e.preventDefault(); setPlaying(!NAV.playing); }
     else if (NAV && (e.key === "h" || e.key === "H")) hudIsOpen() ? closeHud() : openHud(hudApi());
     else if (NAV && (e.key === "m" || e.key === "M") && hudIsOpen()) closeHud();
+    else if (e.key === "v" || e.key === "V") voiceToggleListen();
   });
   addEventListener("resize", () => { if (S.track && !$("#sheet").classList.contains("hidden")) renderProfile(); });
 }
@@ -809,17 +1047,29 @@ function bindControls() {
 // ---------------- boot ----------------
 async function main() {
   tickClock(); setInterval(tickClock, 10000);
-  try { S.site = await loadSite("data/"); }
+  try { S.site = S.baseSite = await loadSite("data/"); S.site.overlays = { hazard: "data/hazard.png", slope: "data/slope.png", rough: "data/rough.png" }; }
   catch (e) { $("#emptyCard").innerHTML = `<div class="empty-title">Couldn't load the terrain data</div><p>${esc(e.message)}</p>`; return; }
   const saved = store.get("marswalk.v2");
   if (saved) {
     S.mode = saved.mode === "drive" ? "drive" : "walk";
     Object.assign(S.opts, saved.opts || {});
-    const ok = (p) => p && Number.isFinite(p.lat) && Number.isFinite(p.lon) && inSite(S.site, p.lat, p.lon);
+    const ok = (p) => p && Number.isFinite(p.lat) && Number.isFinite(p.lon) && inExtent(p.lat, p.lon) && (inSite(S.site, p.lat, p.lon) || (p.unchecked = true));
     S.start = ok(saved.start) ? saved.start : null; S.end = ok(saved.end) ? saved.end : null;
     S.cps = (saved.cps || []).filter(ok).map((c) => ({ ...c, id: cpSeq++ }));
   }
   initMap(); bindControls(); bindSettings(); renderAbout();
+  initVoice({
+    S, live: () => (NAV ? live(NAV.t) : null), endNav, setPlaying, routeTo, planSummary,
+    startNav: () => { if (S.track && !NAV) { startNav(); return true; } return false; },
+    exampleRoute: () => $("#btnExample").click(),
+    flyTo: (it) => flyToSite(it),
+    onLang: () => { applyStatic(KOUI()); renderCard(); if (S.track || S.error) renderSheet(); if (NAV) renderNav(live(NAV.t)); },
+    setView: (v) => setView(v),
+    refine: () => { if (!S.track) return false; S.opts.detail = "high"; $("#inDetail").value = "high"; changed(); return true; },
+    clearRoute: () => $("#btnClear").click(),
+    getRate: () => NAV?.rate, setRate: (n) => { if (NAV) { NAV.rate = n; $("#navRate").value = String(n); } },
+    openHud: () => { if (NAV && !hudIsOpen()) openHud(hudApi()); }, closeHud: () => { if (hudIsOpen()) closeHud(); },
+  });
   if (S.start && S.end) {
     changed();
     map.fitBounds([[S.start.lat, S.start.lon], [S.end.lat, S.end.lon]], { paddingTopLeft: [innerWidth > 760 ? 420 : 30, 60], paddingBottomRight: [40, innerWidth > 760 ? 40 : 300] });
