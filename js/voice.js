@@ -224,6 +224,8 @@ function pickAlternative(res) {
 }
 function toggleListen() { listening ? stopListening() : startListening(); }
 export function voiceToggleListen() { toggleListen(); }
+// run a phrase as if the crew had said it (used by the on-screen emergency buttons)
+export function voiceAsk(text) { return handle(text); }
 function startListening() {
   if (!SR) { $("#voiceText").focus(); return; }
   stopSpeaking();

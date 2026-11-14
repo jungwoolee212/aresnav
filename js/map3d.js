@@ -133,11 +133,12 @@ function drawRoute() {
   if (routeObj) { scene.remove(routeObj); routeObj.geometry.dispose(); routeObj = null; }
   const tr = state.track, site = state.site;
   if (!tr || !site) return;
-  const lift = Math.max(3, site.cell_m * 0.6) * state.exag, pts = [];
+  // sizes follow the view (grid extent), not the cell size: on a coarse 200 m grid cell-sized markers swamp the route
+  const lift = Math.max(2, state.vis * 0.15) * state.exag, pts = [];
   const stride = Math.max(1, Math.floor(tr.pts.length / 1500));
   for (let i = 0; i < tr.pts.length; i += stride) { const p = tr.pts[i], [x, z] = toXZ(site, p.lat, p.lon); pts.push(new T.Vector3(x, heightAt(site, p.lat, p.lon) + lift, z)); }
   if (pts.length < 2) return;
-  const radius = Math.max(1.5, site.cell_m * 0.35, state.vis * 0.12);
+  const radius = Math.max(1.5, state.vis * 0.12);
   routeObj = new T.Mesh(new T.TubeGeometry(new T.CatmullRomCurve3(pts), Math.min(2000, pts.length * 2), radius, 6, false), new T.MeshBasicMaterial({ color: 0x2fd68f }));
   scene.add(routeObj);
 }
@@ -145,7 +146,7 @@ function drawMarkers() {
   if (!markers) return;
   markers.clear();
   const site = state.site; if (!site) return;
-  const size = Math.max(6, site.cell_m * 1.5, state.vis * 0.6);
+  const size = Math.max(4, state.vis * 0.5);
   for (const p of state.points) {
     const [x, z] = toXZ(site, p.lat, p.lon), y = heightAt(site, p.lat, p.lon);
     const m = new T.Mesh(new T.SphereGeometry(size, 16, 12), new T.MeshBasicMaterial({ color: p.kind === "start" ? 0x2fd68f : p.kind === "end" ? 0xe9354f : 0xe8743b }));
@@ -156,7 +157,7 @@ function drawMarkers() {
 }
 export function updatePosition(lat, lon) {
   if (!visible || !state.site) return;
-  const site = state.site, size = Math.max(5, site.cell_m * 1.2, state.vis * 0.5);
+  const site = state.site, size = Math.max(4, state.vis * 0.45);
   if (!meObj) { meObj = new T.Mesh(new T.SphereGeometry(1, 16, 12), new T.MeshBasicMaterial({ color: 0x4aa3ff })); scene.add(meObj); }
   meObj.scale.setScalar(size);
   const [x, z] = toXZ(site, lat, lon); meObj.position.set(x, heightAt(site, lat, lon) + size * 1.5, z);
