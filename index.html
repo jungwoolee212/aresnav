@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Marswalk Navigator</title>
+  <meta name="description" content="Pick a start and destination on Mount Sharp, Mars: the navigator plans the safest walking or rover route, assesses slope, rocks, sunlight and radiation shielding, and guides you turn by turn with a helmet HUD." />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='%23e8743b'/%3E%3Cpath d='M6 18c5-3 9 2 14-1s6-2 7-1' stroke='%23842e12' stroke-width='2.5' fill='none'/%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+  <link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <svg viewBox="0 0 32 32" width="24" height="24" aria-hidden="true"><circle cx="16" cy="16" r="13" fill="var(--mars)"/><path d="M6 18c5-3 9 2 14-1s6-2 7-1" stroke="#842e12" stroke-width="2.5" fill="none"/></svg>
+      <span class="brand-name">Marswalk Navigator</span>
+    </div>
+    <div class="clock" title="Mars time at Gale crater, computed live from UTC">
+      <span><span class="k">SOL</span> <span id="clkSol">—</span></span>
+      <span><span class="k">LMST</span> <span id="clkLmst">—</span></span>
+      <span class="hide-sm"><span class="k">UTC</span> <span id="clkUtc">—</span></span>
+    </div>
+    <nav class="top-actions">
+      <button class="icon-btn" data-open="layers" title="Map layers">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3 2 8l10 5 10-5z"/><path d="m2 13 10 5 10-5"/></svg><span class="lbl">Layers</span>
+      </button>
+      <button class="icon-btn" data-open="settings" title="Planning settings">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg><span class="lbl">Settings</span>
+      </button>
+      <button class="icon-btn" data-open="about" title="About the data">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 11v6M12 7.5v.5"/></svg><span class="lbl">Data</span>
+      </button>
+      <button class="icon-btn" id="btnHelp" title="How to use">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14M12 17.5v.5"/></svg><span class="lbl">Help</span>
+      </button>
+    </nav>
+  </header>
+
+  <main class="stage">
+    <div id="map" aria-label="Map of the Marswalk site"></div>
+    <div class="map-legend" id="mapLegend"></div>
+
+    <!-- ================= PLAN VIEW ================= -->
+    <section id="planView" class="plan-view">
+      <div class="route-card">
+        <div class="rc-rows" id="rcRows">
+          <button class="rc-field" id="fieldStart" data-pick="start"><span class="dot start"></span><span class="rc-text"><span class="rc-k">Start</span><span class="rc-v" id="rcFrom">Tap to choose on the map</span></span></button>
+          <div id="cpList"></div>
+          <button class="rc-field" id="fieldEnd" data-pick="end"><span class="dot end"></span><span class="rc-text"><span class="rc-k">Destination</span><span class="rc-v" id="rcTo">Tap to choose on the map</span></span></button>
+          <button class="icon-btn rc-swap" id="btnSwap" title="Swap start and destination" aria-label="Swap start and destination">⇅</button>
+        </div>
+        <div class="rc-tools">
+          <button class="link-btn" id="btnAddCp" disabled>+ Add checkpoint</button>
+          <button class="link-btn" id="btnExample">Try an example route</button>
+          <button class="link-btn danger hidden" id="btnClear">Clear</button>
+        </div>
+        <div class="modes" role="radiogroup" aria-label="Who is navigating">
+          <button class="mode active" role="radio" aria-checked="true" data-mode="walk">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="13" cy="4" r="2"/><path d="m9 21 2-6 3 3v3M7 12l3-4 4 1 3 3M11 15l-1-5"/></svg>
+            Crew on foot
+          </button>
+          <button class="mode" role="radio" aria-checked="false" data-mode="drive">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="3" y="7" width="15" height="8" rx="2"/><path d="M18 10h2l1 3v2h-3"/><circle cx="7" cy="17" r="2"/><circle cx="16" cy="17" r="2"/></svg>
+            Rover
+          </button>
+        </div>
+      </div>
+
+      <div class="pick-banner hidden" id="pickBanner" role="status">
+        <span id="pickText">Tap the map to set your start point</span>
+        <button class="btn small" id="pickCancel">Cancel</button>
+      </div>
+
+      <div class="empty-card" id="emptyCard">
+        <div class="empty-title">Where are you going?</div>
+        <p>Tap the map to set your <b>start</b>, then tap again for your <b>destination</b>. The navigator finds the safest route and checks it for steep ground, rocks, sunlight, shadow and radiation shielding.</p>
+      </div>
+
+      <div class="sheet hidden" id="sheet">
+        <div class="grab" id="sheetGrab" aria-hidden="true"></div>
+        <div class="computing hidden" id="computing">Finding the safest route…</div>
+        <div class="sum">
+          <div class="sum-main"><span id="sumTime" class="sum-time">—</span><span id="sumDist" class="sum-dist"></span></div>
+          <div class="sum-sub" id="sumSub"></div>
+        </div>
+        <button class="status" id="statusBtn" aria-expanded="false">
+          <span class="status-dot" id="statusDot"></span><span id="statusText">Checking…</span><span class="chev">▾</span>
+        </button>
+        <div class="checks hidden" id="checks"></div>
+        <div class="actions">
+          <button class="btn start" id="btnStart">
+            <svg viewBox="0 0 24 24" width="20" height="20"><path d="M12 2 4 21l8-4 8 4z" fill="currentColor"/></svg>
+            Start
+          </button>
+          <button class="btn" id="btnSteps">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="3.5" cy="6" r="1.2" fill="currentColor"/><circle cx="3.5" cy="12" r="1.2" fill="currentColor"/><circle cx="3.5" cy="18" r="1.2" fill="currentColor"/></svg>
+            Steps
+          </button>
+          <button class="btn" id="btnReport">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3 2 21h20z"/><path d="M12 10v5M12 18v.5"/></svg>
+            Report
+          </button>
+        </div>
+        <div class="profile">
+          <div class="profile-head"><span class="eyebrow">Elevation</span><span class="muted" id="profileInfo"></span></div>
+          <svg id="profileSvg" preserveAspectRatio="none"></svg>
+          <div class="profile-tip hidden" id="profileTip"></div>
+        </div>
+        <p class="hint">Drag the start, destination or a checkpoint to move it; the route re-plans automatically.</p>
+      </div>
+    </section>
+
+    <!-- ================= NAVIGATION VIEW ================= -->
+    <section id="navView" class="nav-view hidden" aria-live="polite">
+      <div class="nav-banner" id="navBanner">
+        <div class="nav-ico" id="navIco"></div>
+        <div class="nav-txt">
+          <div class="nav-dist" id="navDist"></div>
+          <div class="nav-main" id="navMain"></div>
+          <div class="nav-sub" id="navSub"></div>
+        </div>
+      </div>
+      <div class="nav-then hidden" id="navThen"></div>
+      <div class="nav-alert hidden" id="navAlert"></div>
+      <div class="nav-station hidden" id="navStation"></div>
+      <button class="btn nav-recenter hidden" id="navRecenter">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg> Re-centre
+      </button>
+      <div class="nav-bottom">
+        <div class="nav-row">
+          <div class="nav-eta">
+            <div class="eta-time" id="navEta">—</div>
+            <div class="eta-sub" id="navRemain">—</div>
+          </div>
+          <div class="nav-vitals" id="navVitals"></div>
+          <div class="nav-ctrls">
+            <button class="btn round" id="navPlay" title="Pause / resume (Space)" aria-label="Pause">❚❚</button>
+            <select class="btn" id="navRate" title="Simulation speed" aria-label="Simulation speed">
+              <option value="10">10×</option><option value="30">30×</option><option value="60" selected>60×</option><option value="240">240×</option>
+            </select>
+            <button class="btn hudbtn" id="navHud" title="Helmet heads-up display (H)">HUD</button>
+            <button class="btn exit" id="navExit" title="End navigation (Esc)">End</button>
+          </div>
+        </div>
+        <input type="range" id="navScrub" min="0" max="1000" value="0" aria-label="Progress along the route" />
+        <div class="sim-note">Simulated position. On Mars this would follow the suit's navigation fix (there's no GPS).</div>
+      </div>
+    </section>
+
+    <!-- ================= DETAILS DRAWER ================= -->
+    <aside class="drawer" id="drawer" aria-hidden="true">
+      <div class="drawer-head">
+        <h2 id="drawerTitle">Details</h2>
+        <button class="icon-btn" id="drawerClose" aria-label="Close">✕</button>
+      </div>
+
+      <div class="drawer-body" data-pane="steps" data-title="Turn-by-turn steps">
+        <p class="muted small" id="stepsIntro"></p>
+        <ol class="steps" id="stepList"></ol>
+      </div>
+
+      <div class="drawer-body" data-pane="report" data-title="Route report">
+        <div id="reportBody"></div>
+      </div>
+
+      <div class="drawer-body" data-pane="layers" data-title="Map layers">
+        <div class="card">
+          <div class="eyebrow">Base map</div>
+          <div id="baseLayers" class="layer-list"></div>
+        </div>
+        <div class="card">
+          <div class="eyebrow">Science & safety overlays</div>
+          <div id="overlayLayers" class="layer-list"></div>
+        </div>
+        <div class="card">
+          <div class="eyebrow">Terrain probe</div>
+          <div id="probe" class="muted">Hover the map to read elevation, slope and rock density.</div>
+        </div>
+      </div>
+
+      <div class="drawer-body" data-pane="settings" data-title="Planning settings">
+        <div class="card">
+          <div class="eyebrow">Crew on foot</div>
+          <label class="ctl">EVA start (local Mars time) <input type="time" id="inStart" step="900" /></label>
+          <label class="ctl">Suited walking speed <span><output id="oSpeed"></output> km/h</span><input type="range" id="inSpeed" min="1.2" max="4" step="0.1" /></label>
+          <label class="ctl">Steepest slope allowed <span><output id="oSlope"></output>°</span><input type="range" id="inSlope" min="10" max="30" step="1" /></label>
+          <label class="ctl">Suit oxygen (PLSS) <span><output id="oPlss"></output> h</span><input type="range" id="inPlss" min="4" max="10" step="0.5" /></label>
+          <label class="ctl">Route preference <span><output id="oRisk"></output></span><input type="range" id="inRisk" min="0" max="3" step="0.25" /></label>
+          <p class="hint">Left = fastest, right = keeps furthest from steep and rocky ground.</p>
+        </div>
+        <div class="card">
+          <div class="eyebrow">Pressurized rover</div>
+          <label class="ctl">Top speed <span><output id="oRvSpeed"></output> km/h</span><input type="range" id="inRvSpeed" min="2" max="15" step="0.5" /></label>
+          <label class="ctl">Steepest slope it can drive <span><output id="oRvSlope"></output>°</span><input type="range" id="inRvSlope" min="8" max="25" step="1" /></label>
+          <label class="ctl">Rock tolerance <span><output id="oRvRough"></output></span><input type="range" id="inRvRough" min="0.3" max="0.95" step="0.05" /></label>
+        </div>
+        <button class="btn" id="btnReset">Reset route & settings</button>
+      </div>
+
+      <div class="drawer-body" data-pane="about" data-title="About the data">
+        <div class="prose" id="aboutBody"></div>
+      </div>
+    </aside>
+  </main>
+
+  <!-- ================= HELMET HUD ================= -->
+  <div id="hud" class="hud hidden" aria-hidden="true">
+    <canvas id="hudView"></canvas>
+    <div class="hud-vignette"></div>
+    <div class="hud-top">
+      <div class="hud-man" id="hudMan"><div class="hud-man-ico" id="hudManIco"></div><div><div class="hud-man-dist" id="hudManDist"></div><div class="hud-man-txt" id="hudManTxt"></div></div></div>
+      <div class="hud-compass"><div class="tape" id="hudTape"></div><div class="caret"></div></div>
+    </div>
+    <div class="hud-left">
+      <div class="hud-box"><div class="k" id="hudK1">O₂ LEFT</div><div class="v" id="hudV1">—</div><div class="bar"><i id="hudBar1"></i></div></div>
+      <div class="hud-box"><div class="k" id="hudK2">WALK-BACK MARGIN</div><div class="v" id="hudV2">—</div></div>
+      <div class="hud-box"><div class="k">SKY OPEN · SHIELDING</div><div class="v sm" id="hudSky">—</div></div>
+    </div>
+    <div class="hud-right">
+      <div class="hud-box"><div class="k">ARRIVE · LEFT</div><div class="v sm" id="hudEta">—</div></div>
+      <div class="hud-box"><div class="k">SLOPE AHEAD</div><div class="v" id="hudSlope">—</div></div>
+      <div class="hud-box"><div class="k">SUN</div><div class="v sm" id="hudSun">—</div></div>
+    </div>
+    <div class="hud-alert hidden" id="hudAlert"></div>
+    <div class="hud-station hidden" id="hudStation"></div>
+    <canvas class="hud-mini" id="hudMini" width="260" height="260"></canvas>
+    <div class="hud-bottom">
+      <div class="hud-clock" id="hudClock">—</div>
+      <div class="hud-ctrls">
+        <button class="hbtn" id="hudPlay" title="Pause / resume (Space)">❚❚</button>
+        <button class="hbtn" id="hudMap" title="Back to the map (M)">MAP</button>
+        <button class="hbtn" id="hudExit" title="End navigation (Esc)">END</button>
+      </div>
+    </div>
+    <div class="hud-credit">Synthetic view rendered from HiRISE terrain · green ribbon = your route · red = no-go ground</div>
+  </div>
+
+  <!-- ================= HOW-TO GUIDE ================= -->
+  <div id="help" class="help hidden" role="dialog" aria-modal="true">
+    <div class="help-card">
+      <div class="help-step" id="helpStep"></div>
+      <div class="help-dots" id="helpDots"></div>
+      <div class="help-actions">
+        <button class="btn ghost" id="helpSkip">Skip</button>
+        <button class="btn start" id="helpNext">Next</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="lightbox" class="lightbox hidden" role="dialog" aria-modal="true"><img id="lbImg" alt="" /><div id="lbCap"></div></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
