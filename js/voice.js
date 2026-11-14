@@ -211,7 +211,7 @@ function nowPhrase(m) {
     if (/^Arrive/.test(m.text)) return `${m.text.replace(/^Arrive at/, "You have arrived at")}. End of route.`;
     return `${m.text}. ${m.sub || ""}`;
   }
-  if (m.type === "steep") return `${m.text.split(" ·")[0]} starts now. ${m.sub?.split(" · ")[1] || ""}`;
+  if (m.type === "steep") { const tip = m.sub?.split(" · ")[1] || ""; return `${m.text.split(" ·")[0]} starts now.${tip ? ` ${tip[0].toUpperCase()}${tip.slice(1)}.` : ""}`; }
   return `${m.text} now${m.sub ? `, ${m.sub}` : ""}.`;
 }
 
