@@ -391,6 +391,12 @@ async function prepareAndPlan(id) {
   };
   // sharpest elevation model covering every point; "high" detail uses finer cells and skips the prebuilt box
   const detail = S.opts.detail === "high" ? "high" : "standard", hi = detail === "high";
+  // a surface traverse longer than this isn't meaningful (and would cross the 180° meridian or exceed Trek's image limits)
+  for (let i = 1; i < pts.length; i++) {
+    const km = distM([pts[i - 1].lat, pts[i - 1].lon], [pts[i].lat, pts[i].lon]) / 1000;
+    if (km > 1500 || Math.abs(pts[i - 1].lon - pts[i].lon) > 180)
+      return fail(U(`These points are ${fmt(km)} km apart. The planner handles surface traverses up to 1,500 km: pick points closer together, or plan in legs.`));
+  }
   const srcs = sourcesFor(pts);
   // reuse the current grid only if it isn't much bigger than this route needs (a big grid has coarser cells
   // and may have skipped rock density)

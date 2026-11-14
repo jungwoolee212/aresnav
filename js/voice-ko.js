@@ -138,7 +138,9 @@ function one(s) {
   if (/도움말|도와\s*줘|뭘\s*할\s*수|무엇을\s*할\s*수|명령어|어떻게\s*(?:써|사용)|사용법|기능/.test(s)) return "help";
   if (/(?:어떤|무슨)\s*(?:장소|곳|사이트|지역)|장소\s*목록|갈\s*수\s*있는\s*(?:곳|데)|어디\s*갈\s*수/.test(s)) return "what places";
   // ---- questions that look like "go to" sentences ----
-  if (/^다음|어디로\s*가(?:야|면|\?|$)|어느\s*쪽(?:으로)?|이제\s*(?:어떻게|뭐|어디)|뭐\s*해야|어떻게\s*해야|어디\s*가야|길\s*(?:좀\s*)?알려|방향\s*(?:알려|어디)/.test(s) && !/(?:으로|로|까지)\s*(?:데려|가자|가\s*줘)/.test(s)) return "what's next";
+  if (/^다음|어디로\s*가(?:야|면|\?|$)|어느\s*쪽(?:으로)?|이제\s*(?:어떻게|뭐|어디)|뭐\s*해야|어떻게\s*해야|어디\s*가야|길\s*(?:좀\s*)?알려|방향\s*(?:알려|어디)/.test(s) && !/(?:으로|로|까지)\s*(?:데려|가자|가\s*줘)|가는\s*(?:길|경로|방법)/.test(s)) return "what's next";
+  // "올림푸스 산 가는 길", "올림푸스 산까지 가는 경로" with no verb
+  if ((m = s.match(/^(.+?)\s*(?:으로|로|까지|에)?\s*가는\s*(?:길|경로|방법|루트)\s*(?:은|는|이|가)?\s*(?:뭐야|어떻게\s*돼|알려.*|안내.*|찾아.*|보여.*)?$/))) return `take me to ${koPlace(m[1])}`;
   // ---- relative moves: "왼쪽으로 200m", "앞으로 1km 가", "북서쪽으로 2km 가줘" ----
   if ((m = s.match(new RegExp(`^(?:(.+?)(?:에서|로부터)\\s*)?${RELS}\\s*(?:쪽|방향)?\\s*(?:으로|로)?\\s*${DM}`)))) return `take me to ${m[3]} ${m[4]} ${REL[m[2]]}`;
   if ((m = s.match(new RegExp(`^${DM}\\s*${RELS}`)))) return `take me to ${m[1]} ${m[2]} ${REL[m[3]]}`;
@@ -263,7 +265,7 @@ const NAME_KO = [
   [/\bNearest shelter \((\d+)% sky open\)/g, "가장 가까운 대피처(하늘 $1% 개방)"],
   [/\b(Highest|Lowest) point \((-?\d+) m\)/g, (_, w, e) => `${w === "Highest" ? "최고" : "최저"} 지점(고도 ${e}m)`],
   [/(\d+) m (left|right|ahead|back) of (your position|the start)/g, (_, n, d, b) => `${b === "the start" ? "출발지" : "현재 위치"}에서 ${{ left: "왼쪽", right: "오른쪽", ahead: "앞쪽", back: "뒤쪽" }[d]} ${n}m`],
-  [/\bCurrent position\b/g, "현재 위치"], [/\byour position\b/g, "현재 위치"], [/\bthe start\b/g, "출발지"], [/\bthe destination\b/g, "목적지"], [/\bDestination\b/g, "목적지"],
+  [/\bCurrent position\b/g, "현재 위치"], [/\byour position\b/g, "현재 위치"], [/\bthe start\b/g, "출발지"], [/\bthe destination\b/g, "목적지"], [/\bDestination\b(?! set)/g, "목적지"],
   [/(\d+(?:\.\d+)?) South (\d+(?:\.\d+)?) East/g, "남위 $1 동경 $2"], [/(\d+(?:\.\d+)?) North (\d+(?:\.\d+)?) East/g, "북위 $1 동경 $2"],
 ];
 const UNITS = [
@@ -324,6 +326,8 @@ const RULES = [
   [/^There's no real shelter near here: the sky is (.+) open where you are, and no reachable spot within 1\.5 kilometres is more enclosed$/, "근처에 쓸 만한 대피처가 없습니다. 지금 위치는 하늘이 $1 열려 있고, 1.5킬로미터 안에 이보다 더 가려진 곳이 없습니다"],
   [/^Terrain only shields you where cliffs or crater walls block the sky$/, "지형 차폐는 절벽이나 크레이터 벽이 하늘을 가리는 곳에서만 효과가 있습니다"],
   [/^Sky is (.+) open here and (.+) there$/, "여기는 하늘이 $1, 대피처는 $2 열려 있습니다"],
+  [/^(.+) is (.+) kilometres away: too far for a surface traverse \(this planner goes up to 1,500 km\)$/, "$1까지 $2킬로미터: 지표 이동으로는 너무 멉니다(최대 1,500킬로미터)"],
+  [/^I moved the map there$/, "지도를 그곳으로 옮겼습니다"], [/^Pick a start near it, or tap the map$/, "근처에서 출발지를 고르거나 지도를 누르세요"],
   [/^Paused$/, "일시정지했습니다"], [/^Resuming guidance$/, "안내를 계속합니다"], [/^Simulation speed (\d+) times$/, "시뮬레이션 속도 $1배"],
   [/^Already at the (fastest|slowest) simulation speed, (\d+) times$/, (_, f, n) => `이미 가장 ${yesNo(f === "fastest", "빠른", "느린")} 속도입니다. ${n}배`],
   [/^Opening the helmet display$/, "헬멧 화면을 엽니다"], [/^Back to the map$/, "지도로 돌아갑니다"], [/^Ending navigation$/, "안내를 종료합니다"],
@@ -395,9 +399,10 @@ export function enToKo(text) {
 const INI = ["g", "kk", "n", "d", "tt", "r", "m", "b", "pp", "s", "ss", "", "j", "jj", "ch", "k", "t", "p", "h"];
 const MED = ["a", "e", "ia", "ie", "o", "e", "io", "ie", "o", "ua", "ue", "oe", "io", "u", "uo", "ue", "ui", "iu", "eu", "ui", "i"];
 const FIN = ["", "k", "k", "ks", "n", "nj", "n", "t", "l", "lk", "lm", "lb", "ls", "lt", "lp", "l", "m", "p", "ps", "s", "s", "ng", "t", "t", "k", "t", "p", "t"];
-const GENERIC_KO = /크레이터|분화구|산맥|산|협곡|계곡|평원|평지|고원|분지|지역|착륙지|착륙\s*지점|언덕|화산/g;
+const GENERIC_KO = /크레이터|분화구|산맥|산|협곡|계곡|평원|평지|고원|분지|지역|화산/g;
+const NAME_WORDS_KO = [[/능선|산등성이/g, " ridge "], [/사구/g, " dunes "], [/언덕|구릉/g, " hills "], [/착륙\s*지점|착륙지|랜딩/g, " landing "], [/노두/g, " outcrop "], [/뷰트|뷰츠/g, " buttes "], [/꼭대기|정상/g, " top "]];
 export function romanize(s) {
-  const t = String(s).replace(GENERIC_KO, " ");
+  const t = NAME_WORDS_KO.reduce((x, [re, en]) => x.replace(re, en), String(s)).replace(GENERIC_KO, " ");
   let out = "";
   for (const word of t.split(/\s+/)) {
     const syl = [...word];

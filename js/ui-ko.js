@@ -14,6 +14,7 @@ const RULES = [
   [/^Safe to go: all checks passed$/, "출발 가능: 모든 점검 통과"],
   [/^Go with caution: (\d+) things? to watch$/, "주의하며 출발: 확인할 항목 $1개"],
   [/^Tap to choose on the map$/, "지도를 눌러 선택"],
+  [/^These points are (.+) km apart\. The planner handles surface traverses up to 1,500 km: pick points closer together, or plan in legs\.$/, "두 지점이 $1 km 떨어져 있습니다. 지표 이동 경로는 최대 1,500 km까지 계산합니다. 더 가까운 지점을 고르거나 구간을 나눠 계획하세요."],
   [/^Tap the map to set your start point$/, "지도를 눌러 출발지를 정하세요"], [/^Tap the map to set your destination$/, "지도를 눌러 목적지를 정하세요"],
   [/^Tap the map where you want a checkpoint$/, "체크포인트를 둘 곳을 지도에서 누르세요"],
   [/^Finding the safest route…$/, "가장 안전한 경로를 찾는 중…"], [/^Loading (.+)…$/, "$1 불러오는 중…"],

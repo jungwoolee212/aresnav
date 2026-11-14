@@ -216,18 +216,24 @@ function nowPhrase(m) {
 }
 
 // ---------- speech input ----------
+// Among the recogniser's guesses, prefer one that parses as a command or names a known place.
+function pickAlternative(res) {
+  const alts = Array.from({ length: res.length }, (_, k) => res[k].transcript);
+  const ok = (t) => { const q = clean(hasHangul(t) ? koToEnglish(t) : t); return !hasHangul(q) && (routeCommandMatches(q) || /oxygen|next|how far|slope|danger|sun|shelter|checkpoint|elevation|time|where am i|status|help|pause|resume|repeat|mute|hud|map|3d|2d|refine|end navigation|start navigation/.test(q)); };
+  return alts.find(ok) || alts[0];
+}
 function toggleListen() { listening ? stopListening() : startListening(); }
 export function voiceToggleListen() { toggleListen(); }
 function startListening() {
   if (!SR) { $("#voiceText").focus(); return; }
   stopSpeaking();
   rec = new SR();
-  rec.lang = KO() ? "ko-KR" : "en-US"; rec.interimResults = true; rec.maxAlternatives = 1; rec.continuous = false;
+  rec.lang = KO() ? "ko-KR" : "en-US"; rec.interimResults = true; rec.maxAlternatives = 5; rec.continuous = false;
   let final = "";
   rec.onresult = (e) => {
     let interim = "";
     for (let i = e.resultIndex; i < e.results.length; i++) {
-      if (e.results[i].isFinal) final += e.results[i][0].transcript; else interim += e.results[i][0].transcript;
+      if (e.results[i].isFinal) final += pickAlternative(e.results[i]); else interim += e.results[i][0].transcript;
     }
     $("#voiceText").value = final || interim;
   };
@@ -350,7 +356,7 @@ function offset(p, brgDeg, m) {
 // ---------- every place Trek marks, with fuzzy matching ----------
 // Bookmarks, mission waypoints and the 1,783 IAU names. Names are compared on a phonetic key so speech-
 // recognition slips ("olimpus mons") and Korean pronunciations ("올림푸스 산") still find "Olympus Mons".
-const GENERIC = /\b(craters?|mons|montes|vallis|valles|planitia|planum|chasma|chasmata|tholus|patera|fossae?|colles|mensae?|dorsum|dorsa|labyrinthus|landing site|landing area|site)\b/g;
+const GENERIC = /^the\s+|\b(buttes?|craters?|mons|montes|vallis|valles|planitia|planum|chasma|chasmata|tholus|patera|fossae?|colles|mensae?|dorsum|dorsa|labyrinthus|landing site|landing area|site)\b/g;
 function canon(s) {
   return String(s).toLowerCase().replace(GENERIC, " ").replace(/ph/g, "f").replace(/th/g, "t").replace(/sh/g, "s").replace(/ch/g, "k")
     .replace(/[cqkg]/g, "k").replace(/[bpfv]/g, "p").replace(/[dt]/g, "t").replace(/[jzsx]/g, "s").replace(/[lr]/g, "r").replace(/y/g, "i").replace(/w/g, "u")
@@ -375,7 +381,7 @@ function markedPlaces() {
     ...PLACES_DATA.waypoints.map(([name, m, lat, lon]) => ({ name, lat, lon, aliases: [name.toLowerCase(), `${m} ${name}`.toLowerCase()], site: { lat, lon, zoom: 15 } })),
     ...PLACES_DATA.names.map(([name, lat, lon, k]) => ({ name, lat, lon, aliases: [name.toLowerCase()], site: { lat, lon, zoom: k === "Crater" ? 10 : 7 } })),
   ];
-  for (const p of marked) p.key = canon(p.name);
+  for (const p of marked) { p.key = canon(p.name); p.skel = p.key.replace(/[aeiou]/g, ""); }
   return marked;
 }
 const KIND_KO = [[/산|몬스/, "mons"], [/크레이터|분화구/, "crater"], [/협곡|계곡|발리스|발레스/, "vall"], [/평원|플라니티아/, "planitia"], [/고원|플라눔/, "planum"], [/테라/, "terra"]];
@@ -383,7 +389,12 @@ function fuzzyPlace(text, min = 0.78, said = text) {
   const k = canon(text); if (k.length < 4) return null;
   const kinds = [...(String(said).toLowerCase().match(/mons|crater|vall|planitia|planum|terra|chasma|tholus|patera|fossa/g) || []), ...KIND_KO.filter(([re]) => re.test(said)).map(([, k2]) => k2)];
   let best = null, bs = 0;
-  for (const p of markedPlaces()) { const r = ratio(k, p.key) + (kinds.some((w) => p.name.toLowerCase().includes(w)) ? 0.05 : 0); if (r > bs) { bs = r; best = p; } }
+  const sk = k.replace(/[aeiou]/g, "");
+  for (const p of markedPlaces()) {
+    const full = ratio(k, p.key), skel = sk.length >= 3 && p.skel.length >= 3 ? ratio(sk, p.skel) * 0.9 : 0;
+    const r = Math.max(full, skel) + (kinds.some((w) => p.name.toLowerCase().includes(w)) ? 0.05 : 0);
+    if (r > bs) { bs = r; best = p; }
+  }
   return bs >= min ? best : null;
 }
 
@@ -491,9 +502,14 @@ function extreme(sign) {
 }
 
 // ---------- route commands ----------
+// does this (English) text look like a route request? used to choose between recognition alternatives
+const routeCommandMatches = (q) => /^(route|show|take|guide|bring|lead|navigate|go|head|start|begin|set|add|switch|save|clear|example|from|how (do|can)|directions|i want|let's go)\b/.test(q);
 function routeCommand(q) {
   const nav = !!C.live();
   let m;
+  if ((m = q.match(/^(?:(?:show|give|find|plan|get|tell|make)\s+(?:me\s+|us\s+)?)?(?:a\s+|the\s+)?(?:route|path|way|directions?|navigation|traverse)\s+(?:to|towards?|for)\s+(.+)$/))
+    || (m = q.match(/^(?:how (?:do|can|would|should) (?:i|we) (?:get|go|walk|drive) to|how to get to|how far is it to|i want a route to)\s+(.+)$/)))
+    return setRoute({ end: m[1], fromHere: true });
   if ((m = q.match(/^(?:show(?: me)?|fly to|zoom to|go to the site|take me to the site|open|jump to|move the map to)\s+(.+)$/)) && !nav)
     return resolvePlace(m[1]).then((p) => { if (p.error) return p.error; if (p.site) C.flyTo(p.site); else C.flyTo({ lat: p.lat, lon: p.lon, zoom: 15 });
       return `Showing ${p.name}. Say start from a place there, or tap the map, to plan a route.`; });
@@ -536,6 +552,16 @@ async function setRoute({ start, end, addCp, mode: newMode, go = false, fromHere
   }
   if (addCp) { const p = await resolvePlace(addCp); if (p.error) return p.error; spec.addCp = p; }
   if (fromHere && nav) spec.cps = [];   // a new destination mid-route replaces the old plan
+  {
+    const a = spec.start || S.start, b = spec.end || S.end;
+    if (a && b && spec.end) {
+      const km = distM([a.lat, a.lon], [b.lat, b.lon]) / 1000;
+      if (km > 1500 || Math.abs(a.lon - b.lon) > 180) {
+        C.flyTo(b.site || { lat: b.lat, lon: b.lon, zoom: 9 });
+        return `${b.name || "That place"} is ${Math.round(km).toLocaleString("en-US")} kilometres away: too far for a surface traverse (this planner goes up to 1,500 km). I moved the map there. Pick a start near it, or tap the map.`;
+      }
+    }
+  }
   const a = spec.start || S.start, b = spec.end || S.end;
   if (a && b && distM([a.lat, a.lon], [b.lat, b.lon]) < 20) return "You're already there.";
   spec.autoStart = go || nav;
