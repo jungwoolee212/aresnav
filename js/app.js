@@ -229,10 +229,14 @@ function renderSites() {
 }
 function flyToSite(it) { if (it.bounds) map.flyToBounds(it.bounds, { duration: 1.2 }); else map.flyTo([it.lat, it.lon], it.zoom || 11, { duration: 1.2 }); }
 function renderLegend() {
-  $("#mapLegend").innerHTML = layerDefs.overlays.filter((d) => d.legend && map.hasLayer(d.layer)).map((d) => {
+  const overlays = layerDefs.overlays.filter((d) => d.legend && map.hasLayer(d.layer)).map((d) => {
     const [n, g, a, z] = d.legend;
     return `<div>${n}</div><div class="ramp" style="background:${g}"></div><div class="legend-row" style="justify-content:space-between"><span>${a}</span><span>${z}</span></div>`;
   }).join("");
+  // the route line is coloured by the slope of each stretch (slopeColor)
+  const ko = KOUI(), route = !S.track ? "" : `<div>${ko ? "경로 경사" : "Route slope"}</div><div class="slope-key">${[["#2fd68f", "< 8°"], ["#f5c84b", "8–15°"], ["#f58a3b", "15–20°"], ["#e9354f", "> 20°"]]
+    .map(([c, t]) => `<span><i style="background:${c}"></i>${t}</span>`).join("")}</div>`;
+  $("#mapLegend").innerHTML = route + overlays;
 }
 
 function probe(lat, lon) {
@@ -436,7 +440,7 @@ async function prepareAndPlan(id) {
 function clearRoute() {
   S.track = S.mans = S.ana = S.checks = null; S.error = null;
   routeGroup.clearLayers(); dangerGroup.clearLayers();
-  sync3d();
+  sync3d(); renderLegend();
 }
 
 function plan() {
@@ -676,6 +680,7 @@ function renderRoute() {
     if (c !== col || i === pts.length - 1) { L.polyline(seg, { color: col, weight: 6, opacity: 1, interactive: false }).addTo(routeGroup); seg = [ll[i]]; col = c; }
   }
   doneLine = L.polyline([], { color: "#9aa3b2", weight: 6, opacity: 1, interactive: false }).addTo(routeGroup);
+  renderLegend();
   for (const d of S.ana.dangers) {
     const p = pts[d.i];
     L.marker([p.lat, p.lon], { icon: L.divIcon({ className: "", html: `<div class="danger-pin ${d.sev === "bad" ? "bad" : ""}" style="${d.sev === "info" ? "background:#4aa3ff;color:#fff" : ""}">${d.n}</div>`, iconSize: [18, 18] }), zIndexOffset: 200 })
@@ -1069,7 +1074,7 @@ async function main() {
     startNav: () => { if (S.track && !NAV) { startNav(); return true; } return false; },
     exampleRoute: () => $("#btnExample").click(),
     flyTo: (it) => flyToSite(it),
-    onLang: () => { applyStatic(KOUI()); renderCard(); if (S.track || S.error) renderSheet(); if (NAV) renderNav(live(NAV.t)); },
+    onLang: () => { applyStatic(KOUI()); renderLegend(); renderCard(); if (S.track || S.error) renderSheet(); if (NAV) renderNav(live(NAV.t)); },
     setView: (v) => setView(v),
     refine: () => { if (!S.track) return false; S.opts.detail = "high"; $("#inDetail").value = "high"; changed(); return true; },
     clearRoute: () => $("#btnClear").click(),
