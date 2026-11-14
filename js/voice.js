@@ -601,7 +601,7 @@ async function setRoute({ start, end, addCp, mode: newMode, go = false, fromHere
   if (newMode && !start && !end && !addCp && res.need) return `Switched to ${newMode === "drive" ? "rover" : "on-foot"} mode.`;
   if (res.need === "start") return `Destination set${spec.end ? ` to ${spec.end.name}` : ""}. Where do you start? Say "start from" a place, or tap the map.`;
   if (res.need === "end") return `Start set${spec.start ? ` at ${spec.start.name}` : ""}. Where are you going?`;
-  if (!res.ok) return farNote + (res.error || "I couldn't plan that route.");
+  if (!res.ok) return res.error || "I couldn't plan that route.";
   return farNote + routeSpoken(res.navigating);
 }
 function routeAndWait(spec) {

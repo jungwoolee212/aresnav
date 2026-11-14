@@ -59,7 +59,8 @@ function tickClock() {
 const MarsCRS = L.extend({}, L.CRS.EPSG4326, { R: MARS_R });
 const TREK = (id, ext = "png") => `https://trek.nasa.gov/tiles/Mars/EQ/${id}/1.0.0/default/default028mm/{z}/{y}/{x}.${ext}`;
 const TREK_ATTR = '<a href="https://trek.nasa.gov/mars/" target="_blank" rel="noopener">NASA/JPL Mars Trek</a>';
-const trek = (id, ext, maxNative, extra = {}) => L.tileLayer(TREK(id, ext), { maxNativeZoom: maxNative, maxZoom: 20, noWrap: true, attribution: TREK_ATTR, ...extra });
+// crossOrigin: tiles come back as normal (not opaque) responses, so the offline cache stores them compactly
+const trek = (id, ext, maxNative, extra = {}) => L.tileLayer(TREK(id, ext), { maxNativeZoom: maxNative, maxZoom: 20, noWrap: true, crossOrigin: "anonymous", attribution: TREK_ATTR, ...extra });
 let map, layerDefs, routeGroup, casing, doneLine, markerGroup, dangerGroup, hoverDot, meMarker, sitePopup, siteRect, coverageLayer;
 
 // switch the terrain grid the planner uses (prebuilt site or a corridor analysed in the browser)
@@ -424,7 +425,9 @@ async function prepareAndPlan(id) {
       if (pts.every((p) => hasData(site, cellOf(site, p.lat, p.lon)))) break;
       site = null;
     }
-    if (!site) return fail(`Couldn't load terrain from NASA Mars Trek${lastErr ? ` (${lastErr.message})` : ""}. Check the connection and try again.`);
+    if (!site) return fail(!navigator.onLine || /fetch|network/i.test(lastErr?.message || "")
+      ? "No connection, and the terrain for this area isn't saved on this device yet. Routes and places already loaded still work offline; connect once to plan here."
+      : `Couldn't load terrain from NASA Mars Trek${lastErr ? ` (${lastErr.message})` : ""}. Check the connection and try again.`);
     site.detail = detail;
     setSite(site);
     if (site.lowRes) toast(KOUI() ? `이 경로는 ${Math.round(site.cell_m)}m 간격의 거친 지형 데이터밖에 없어요. 큰 지형으로 대략적인 길은 보여 주지만, 수백 m보다 작은 절벽·턱·바위는 안 보이니 걸어도 안전한지 판단하는 데는 쓰지 마세요.`
@@ -1096,5 +1099,13 @@ async function main() {
     map.fitBounds([[S.start.lat, S.start.lon], [S.end.lat, S.end.lon]], { paddingTopLeft: [innerWidth > 760 ? 420 : 30, 60], paddingBottomRight: [40, innerWidth > 760 ? 40 : 300] });
   } else { changed(); setPick(S.start ? "end" : "start"); }
   if (!store.get("marswalk.helped")) showHelp(0);
+  // Offline: dust storms or terrain can cut the link to the habitat or a relay. Everything already loaded keeps working.
+  const net = () => toast(navigator.onLine
+    ? (KOUI() ? "다시 연결됐어요." : "Back online.")
+    : (KOUI() ? "오프라인이에요. 이미 불러온 지도·지형·경로로 안내와 음성 해석은 계속됩니다. 새 지역을 보려면 연결이 필요해요."
+      : "Offline. Guidance and the voice assistant keep working with the maps, terrain and route already loaded; new places need a connection."), 7000);
+  addEventListener("offline", net); addEventListener("online", net);
+  if (!navigator.onLine) net();
 }
 main();
+if ("serviceWorker" in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register("sw.js").catch(() => {});
