@@ -1,6 +1,8 @@
 # Marswalk Navigator
 
-**NASA Space Apps Challenge 2026.** A navigation app for crew on foot or in a pressurized rover on Mount Sharp, Gale crater. Pick a start and a destination; it plans the safest route and checks it for dangers, elevation, sunlight and radiation shielding. Then it guides you turn by turn on a map or in a helmet HUD.
+**NASA Space Apps Challenge 2026.** A navigation app for crew on foot or in a pressurized rover on Mars. Pick a start and a destination; it plans the safest route and checks it for dangers, elevation, sunlight and radiation shielding. Then it guides you turn by turn on a map, in a helmet HUD or by voice (English or Korean).
+
+It is built around lower Mount Sharp in Gale crater, where a prebuilt HiRISE terrain grid gives EVA-grade results. You can plan anywhere else on Mars too: the app uses the sharpest NASA Mars Trek elevation model for that ground, and routes planned only on coarse global terrain are flagged as reconnaissance, never "safe to go".
 
 ## How to use
 
@@ -88,6 +90,13 @@ Needs `numpy` and `Pillow`. Downloads about 460 Trek tiles (about 6 minutes).
 ## Deploy (GitHub Pages)
 
 Push to a public GitHub repo. Then go to **Settings → Pages → Deploy from a branch → `main` / root**. There is no build step.
+
+## Use of AI (SI) tools
+
+- **Code.** Most of the code, data-processing scripts and this README were written with an AI coding assistant, Claude Code (Anthropic's Claude models), under the team's direction. The team chose the design, set the requirements and data sources, and tested and reviewed the results.
+- **Data.** No data in this app is AI-generated. Terrain, elevation, imagery and place names come from NASA Mars Trek. AI-written scripts in `tools/` process that data into `data/`, `js/catalog.js` and `js/places.js`.
+- **In the app.** The voice assistant runs onboard without AI by default. If a user pastes their own Claude API key in Settings, questions the onboard parser can't handle go to Claude (`claude-opus-5-5`). This is optional and off by default.
+- **Images and video.** None of the images in the app are AI-generated. No NASA logos, flags or mission insignia are used.
 
 ## Limits
 
