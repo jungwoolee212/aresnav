@@ -318,6 +318,8 @@ const UNITS = [
   [/(\d\d?):(\d\d) local (?:mean solar )?time/g, (_, h, m) => `현지 시각 ${+h}시${+m ? ` ${+m}분` : ""}`],
 ];
 const subAll = (s, list) => list.reduce((t, [re, to]) => t.replace(re, to), s);
+// place names on screen (route card, markers) in Korean
+export const nameKo = (s) => (s ? subAll(String(s), NAME_KO) : s);
 // a maneuver clause such as "bear right, toward X" or "steep climb · 18°, for 95 m · short steps, lean forward"
 function mClause(s) {
   const parts = s.split(/,\s+(?=to avoid|toward|for \d|End of route|Stop here)/);
@@ -365,6 +367,7 @@ const RULES = [
   [/^Re-analysing the terrain along this route on a finer grid$/, "이 경로 주변 지형을 더 촘촘한 격자로 다시 분석합니다"], [/^There's no route to refine yet$/, "아직 정밀 분석할 경로가 없습니다"],
   [/^Left or right of what\? Before guidance starts, use compass directions, like 200 metres north$/, "안내 전에는 왼쪽·오른쪽 기준이 없습니다. '북쪽으로 200미터'처럼 방위로 말해 주세요"],
   [/^There's no real shelter near here: the sky is (.+) open where you are, and no reachable spot within 1\.5 kilometres is more enclosed$/, "근처에 쓸 만한 대피처가 없습니다. 지금 위치는 하늘이 $1 열려 있고, 1.5킬로미터 안에 이보다 더 가려진 곳이 없습니다"],
+  [/^In a solar storm, head back to base: say take me back to base$/, "태양 폭풍이 오면 기지로 돌아가세요. '기지로 돌아가'라고 말하면 됩니다"],
   [/^Terrain only shields you where cliffs or crater walls block the sky$/, "지형 차폐는 절벽이나 크레이터 벽이 하늘을 가리는 곳에서만 효과가 있습니다"],
   [/^Sky is (.+) open here and (.+) there$/, "여기는 하늘이 $1, 대피처는 $2 열려 있습니다"],
   [/^The terrain blocks (.+) of the sky here and (.+) there$/, "지형이 하늘을 가리는 비율은 여기가 $1, 대피처가 $2입니다"],

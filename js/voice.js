@@ -501,7 +501,7 @@ function findShelter() {
   }
   const blocks = (sky) => Math.round((1 - sky) * 100);
   if (!best || skyHere - best.sky < 0.05)
-    return { error: `There's no real shelter near here: the terrain blocks only ${blocks(skyHere)} percent of the sky where you are, and no reachable spot within 3 kilometres blocks much more. Terrain only shields you where cliffs or crater walls block the sky.` };
+    return { error: `There's no real shelter near here: the terrain blocks only ${blocks(skyHere)} percent of the sky where you are, and no reachable spot within 3 kilometres blocks much more. Terrain only shields you where cliffs or crater walls block the sky. In a solar storm, head back to base: say take me back to base.` };
   return { lat: best.lat, lon: best.lon, name: `Nearest shelter (terrain blocks ${blocks(best.sky)}% of the sky)`,
     shelterNote: `The terrain blocks ${blocks(skyHere)} percent of the sky here and ${blocks(best.sky)} percent there.` };
 }

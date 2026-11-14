@@ -11,6 +11,7 @@ import { buildManeuvers, stateAt, nextManeuver, maneuverIcon, headingAt, idxAtDi
 import { renderTerrainView } from "./terrain3d.js";
 import { openHud, closeHud, hudIsOpen, updateHud } from "./hud.js";
 import { initVoice, voiceNavStart, voiceNavEnd, voiceTick, voiceToggleListen, voiceLang } from "./voice.js";
+import { nameKo } from "./voice-ko.js";
 import { uiKo, navKo, applyStatic } from "./ui-ko.js";
 import { inExtent, normLon, sourcesFor, sourceLabel, corridorFor, covers, buildSite, hasData } from "./terrain-live.js";
 import { CATALOG } from "./catalog.js";
@@ -281,7 +282,7 @@ function makePoint(lat, lon, name) {
   }
   return { lat, lon, name: name || null };
 }
-const pointLabel = (p) => { if (p.name) return p.name; const e = elevAt(S.site, p.lat, p.lon); return e == null ? coordTxt(p) : `${coordTxt(p)} · ${fmt(e)} m`; };
+const pointLabel = (p) => { if (p.name) return KOUI() ? nameKo(p.name) : p.name; const e = elevAt(S.site, p.lat, p.lon); return e == null ? coordTxt(p) : `${coordTxt(p)} · ${fmt(e)} m`; };
 
 function setPoint(kind, lat, lon, name) {
   const p = makePoint(lat, lon, name);
@@ -1002,13 +1003,21 @@ const HELP = [
   ["Checkpoints when you want them", "Tap the map once a route exists, or use “+ Add checkpoint”, to add a stop. Name it, set how long you'll stay, drag to move.", '<svg width="80" height="80" viewBox="0 0 80 80"><circle cx="40" cy="40" r="14" fill="#e8743b" stroke="#fff" stroke-width="4"/><text x="40" y="46" text-anchor="middle" font-family="monospace" font-weight="700" font-size="16" fill="#fff">1</text></svg>'],
   ["Start navigating", "Press Start for spoken turn-by-turn guidance, or HUD for the helmet display with a 3D view of the terrain ahead. Tap the mic (or press V) to ask the voice assistant about oxygen, the next turn or the nearest shelter.", '<svg width="80" height="80" viewBox="0 0 24 24"><path d="M12 2 4 21l8-4 8 4z" fill="#2fd68f"/></svg>'],
 ];
+const HELP_KO = [
+  ["출발지 고르기", "EVA를 시작할 곳을 지도에서 누르세요(초록 점). 화성 어디든 됩니다. 점선 윤곽은 정밀한 HiRISE / CTX 고도 모델이 있는 곳이고, 경로를 정하면 그 주변 지형을 분석합니다. 레이어 → 사이트로 이동에서 예제로, 게일, 컬럼비아 힐스 등으로 바로 갈 수 있습니다. 또는 마이크를 누르고 “착륙 평원에서 박스워크 능선까지 안내해 줘”라고 말하세요."],
+  ["목적지 고르기", "한 번 더 눌러 갈 곳을 정하세요. 내비게이터가 급경사와 바위 지대를 피해 가장 안전한 경로를 찾고, 경사에 따라 색으로 표시합니다."],
+  ["안전 점검 읽기", "시간, 거리, 산소 귀환 여유, 일조, 가파르거나 바위가 많은 구간, 지형 그늘, 방사선 차폐를 보여 줍니다. 보고서를 열면 위험 지점을 지도에서 볼 수 있습니다."],
+  ["원할 때 체크포인트 추가", "경로가 있을 때 지도를 누르거나 “+ 체크포인트 추가”를 눌러 들를 곳을 넣으세요. 이름을 붙이고, 머무를 시간을 정하고, 끌어서 옮길 수 있습니다."],
+  ["안내 시작", "‘안내 시작’을 누르면 음성으로 길을 안내하고, HUD를 누르면 앞쪽 지형을 3D로 보여 주는 헬멧 화면이 열립니다. 마이크를 누르거나(V 키) 산소, 다음 방향, 가장 가까운 대피소를 물어보세요."],
+];
 let helpK = 0;
 function showHelp(k = 0) {
   helpK = k; $("#help").classList.remove("hidden");
-  const [t, p, art] = HELP[k];
+  const [, , art] = HELP[k], [t, p] = KOUI() ? HELP_KO[k] : HELP[k];
   $("#helpStep").innerHTML = `<div class="art">${art}</div><h3>${t}</h3><p>${p}</p>`;
   $("#helpDots").innerHTML = HELP.map((_, i) => `<i class="${i === k ? "on" : ""}"></i>`).join("");
-  $("#helpNext").textContent = k === HELP.length - 1 ? "Got it" : "Next";
+  $("#helpNext").textContent = KOUI() ? (k === HELP.length - 1 ? "확인" : "다음") : k === HELP.length - 1 ? "Got it" : "Next";
+  $("#helpSkip").textContent = KOUI() ? "건너뛰기" : "Skip";
 }
 function hideHelp() { $("#help").classList.add("hidden"); store.set("marswalk.helped", 1); }
 
@@ -1074,7 +1083,7 @@ async function main() {
     startNav: () => { if (S.track && !NAV) { startNav(); return true; } return false; },
     exampleRoute: () => $("#btnExample").click(),
     flyTo: (it) => flyToSite(it),
-    onLang: () => { applyStatic(KOUI()); renderLegend(); renderCard(); if (S.track || S.error) renderSheet(); if (NAV) renderNav(live(NAV.t)); },
+    onLang: () => { applyStatic(KOUI()); renderLegend(); renderCard(); if (!$("#help").classList.contains("hidden")) showHelp(helpK); if (S.track || S.error) renderSheet(); if (NAV) renderNav(live(NAV.t)); },
     setView: (v) => setView(v),
     refine: () => { if (!S.track) return false; S.opts.detail = "high"; $("#inDetail").value = "high"; changed(); return true; },
     clearRoute: () => $("#btnClear").click(),
