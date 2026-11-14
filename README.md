@@ -81,14 +81,6 @@ Speech output uses the browser's speech synthesis. Voice input uses the Web Spee
 
 **Elevation scale.** Trek serves the DEM as 8-bit tiles. Heights use `metres = 17.97 × DN − 4569.2`, fitted once against Curiosity's published elevations (RMS 4.6 m). This is disclosed in the app's Data panel. Slopes, shadows and shielding don't depend on it.
 
-## Run locally
-
-```bash
-python3 -m http.server 8000
-```
-
-Open http://localhost:8000.
-
 ## Rebuild the terrain data
 
 ```bash
