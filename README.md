@@ -1,5 +1,15 @@
 # Marswalk Navigator
 
+**Live app: [jungwoolee212.github.io/mars-eva-navigator](https://jungwoolee212.github.io/mars-eva-navigator/)**. It runs in the browser with nothing to install. Press *Try an example route*, then *Start*.
+
+![Route planning on lower Mount Sharp: the safest walking route, hazard overlay and safety checks](docs/plan.jpg)
+
+| Turn-by-turn guidance with the voice assistant | 3D view of the analysed terrain |
+|---|---|
+| ![Guidance view: next turn, oxygen, walk-back margin, sun and sky-view readouts](docs/guidance.jpg) | ![3D terrain mesh with the planned route](docs/3d.jpg) |
+
+Screenshots are of the live app (not AI-generated).
+
 **NASA Space Apps Challenge 2026.** A navigation app for crew on foot or in a pressurized rover on Mars. Pick a start and a destination; it plans the safest route and checks it for dangers, elevation, sunlight and radiation shielding. Then it guides you turn by turn on a map, in a helmet HUD or by voice (English or Korean).
 
 It is built around lower Mount Sharp in Gale crater, where a prebuilt HiRISE terrain grid gives EVA-grade results. You can plan anywhere else on Mars too: the app uses the sharpest NASA Mars Trek elevation model for that ground, and routes planned only on coarse global terrain are flagged as reconnaissance, never "safe to go".
