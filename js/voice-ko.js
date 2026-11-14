@@ -7,7 +7,7 @@ export const hasHangul = (s) => /[가-힣]/.test(String(s));
 const DIR = { 북동: "north east", 북서: "north west", 남동: "south east", 남서: "south west", 북: "north", 남: "south", 동: "east", 서: "west" };
 const DIR_KO = { north: "북", "north-east": "북동", "north east": "북동", east: "동", "south-east": "남동", "south east": "남동", south: "남", "south-west": "남서", "south west": "남서", west: "서", "north-west": "북서", "north west": "북서" };
 const DIST = "(\\d+(?:\\.\\d+)?)\\s*(킬로미터|킬로|km|㎞|미터|m)";
-const DIRS = "(북동|북서|남동|남서|북|남|동|서)\\s*(?:쪽|방향)?";
+const DIRS = "(북동|북서|남동|남서|북|남|동|서)\\s*(?:쪽)?\\s*(?:방향)?";
 const unit = (u) => (/^(킬로|km|㎞)/.test(u) ? "km" : "m");
 
 const PLACES = [
@@ -22,9 +22,10 @@ const PLACES = [
   [/올림(?:푸|포)스\s*(?:산|몬스)?/g, "olympus mons"], [/매리너(?:스)?\s*(?:협곡|계곡)|마리너\s*(?:협곡|계곡)|발레스\s*마리네리스/g, "valles marineris"],
   [/헬라스\s*(?:평원|분지)?/g, "hellas planitia"], [/엘리시움\s*(?:산|몬스)?/g, "elysium mons"], [/아르시아\s*(?:산|몬스)?/g, "arsia mons"],
   [/파보니스\s*(?:산|몬스)?/g, "pavonis mons"], [/아스크라이우스\s*(?:산|몬스)?/g, "ascraeus mons"], [/유토피아\s*(?:평원)?/g, "utopia planitia"],
-  [/가장\s*가까운\s*(?:대피소|대피처|피난처|쉼터|은신처)|(?:대피소|대피처|피난처|은신처)|(?:방사선\s*)?(?:숨을|피할|대피할|가릴)\s*(?:데|곳)/g, "nearest shelter"],
+  [/(?:이\s*근처에서\s*|근처\s*|제일\s*|가장\s*|안전하게\s*)*(?:가까운\s*)?(?:대피소|대피처|피난처|쉼터|은신처)|(?:이\s*근처에서\s*|근처\s*|제일\s*|가장\s*|안전하게\s*)*(?:방사선\s*)?(?:숨을|피할|대피할|가릴)\s*(?:수\s*있는\s*)?(?:데|곳)|(?:머리\s*위를?\s*)?(?:가려|막아)\s*줄\s*(?:만한\s*|수\s*있는\s*)?(?:데|곳)|(?:몸을?\s*)?숨길\s*(?:만한\s*)?(?:데|곳)|엄폐(?:물|할\s*(?:데|곳))?|피신(?:처|할\s*(?:데|곳))?/g, "nearest shelter"],
+  [/머레이\s*(?:뷰트|뷰츠|버트|부트)?/g, "murray buttes"],
   [/착륙\s*(?:지점|지역|장소)|착륙지/g, "landing site"],
-  [/가장\s*높은\s*(?:곳|지점|데)|최고\s*지점/g, "highest point"], [/가장\s*낮은\s*(?:곳|지점|데)|최저\s*지점/g, "lowest point"],
+  [/(?:가장|제일)\s*높은\s*(?:곳|지점|데)|최고\s*지점|꼭대기/g, "highest point"], [/(?:가장|제일)\s*낮은\s*(?:곳|지점|데)|최저\s*지점|바닥/g, "lowest point"],
   [/현재\s*위치|지금\s*위치|내\s*위치|여기|이곳/g, "here"],
   [/출발\s*(?:지|점)|기지|베이스|캠프\s*(?=$)|처음\s*위치/g, "start"], [/목적지|도착지/g, "destination"],
 ];
@@ -67,10 +68,10 @@ function koNumber(w) {
 }
 const UNIT_RE = "(킬로미터|킬로\\s*미터|킬로|키로|km|㎞|미터|m)";
 function normNumbers(s) {
-  return s.replace(/키로/g, "킬로")
+  return s.replace(/키로/g, "킬로").replace(/(^|\s)(?:한|약|대략|대충|얼추)\s+(?=\d)/g, "$1")
     .replace(new RegExp(`((?:[영공일이삼사오육륙칠팔구십백천점]\\s?)+|하나|한|둘|두|셋|세|넷|네|다섯|여섯|일곱|여덟|아홉|열)\\s*${UNIT_RE}`, "g"),
       (all, num, u) => { const n = koNumber(num); return n == null ? all : `${n}${/^(킬로|km|㎞)/.test(u) ? "km" : "m"}`; })
-    .replace(/(\d+(?:\.\d+)?)\s*(?:킬로\s*미터|킬로|km|㎞)/g, "$1km").replace(/(\d+(?:\.\d+)?)\s*(?:미터|m)(?![a-z])/g, "$1m")
+    .replace(/(\d+(?:\.\d+)?)\s*(?:킬로\s*미터|킬로|km|㎞)/g, "$1km").replace(/(\d+(?:\.\d+)?)\s*(?:미터|m)(?![a-z])/g, "$1m").replace(/(\d+(?:\.\d+)?(?:km|m))\s*(?:정도|쯤|가량|남짓|만)/g, "$1")
     // "조금", "살짝" with a direction = 100 m
     .replace(/(왼쪽|오른쪽|좌측|우측|앞쪽?|정면|뒤쪽?|후방|직진|북동|북서|남동|남서|북|남|동|서)(쪽|방향)?\s*(?:으로|로)?\s*(?:조금|약간|살짝|좀)/g, "$1$2 100m");
 }
@@ -82,33 +83,67 @@ const GO = "(?:가|이동|데려|안내|걸어|운전|움직|전진)";
 function one(s) {
   let m;
   const start = /(?:안내(?:\s*시작)?|출발하자|가자|데려|길\s*안내|바로\s*출발)/.test(s) && !/(?:경로|길|루트)\s*(?:만\s*)?(?:찾|계획|짜|알려|보여|만들)/.test(s);
+
+  // ---- questions and commands that contain route-like words: settle these first ----
+  if ((m = s.match(/^(?:지도|맵)\s*(?:에서|에|상에서)\s*(.+?)\s*(?:을|를|이|가)?\s*(?:찾아|보여|어디)/))) return `show me ${koPlace(m[1])}`;
+  if (/해\s*지기\s*전|어두워지기\s*전|일몰\s*전|밤\s*(?:되기|오기|이\s*되기)\s*전|해\s*(?:가\s*)?(?:떠|떴)|해\s*(?:가\s*)?(?:언제|몇\s*시(?:에)?)\s*(?:떠|뜨)|^(?:지금\s*)?해\s*(?:가\s*)?(?:있|보여)/.test(s)) return "is the sun up";
+  if (/^여기\s*(?:가|는)?\s*어디/.test(s)) return "where am i";
+  if ((m = s.match(/^(.+?)\s*(?:이|가|은|는)\s*어디(?:야|에\s*있|있|지|예요|인가|쯤)/)) && !/^(?:여기|거기|지금|나|내|저|우리|다음|대피|피난|목적지|출발지|도착지|체크|경유)/.test(m[1]) && !/대피|피난|쉼터|은신처|숨을|피할|산소|목적지|출발지/.test(m[1]) && !hasHangul(koPlace(m[1]))) return `show me ${koPlace(m[1])}`;
+  if (/^(?:내|제|나의|저의|우리|현재|지금)\s*(?:의\s*)?(?:위치|좌표)/.test(s) && !/저장|기억|등록/.test(s)) return "where am i";
+  if (/돌아가(?:려면|면|는\s*데|도)|돌아갈\s*(?:수\s*(?:는|도)?\s*있|시간|여유|산소)|귀환\s*(?:시간|가능)/.test(s) && /얼마|몇|충분|걸려|걸리|가능|있을까|있어|될까|돼|되나|남|괜찮/.test(s)) return "how long to walk back";
+  if (/(?:목적지|도착지|도착)\s*까지\s*.*(?:얼마|몇|남았|걸려|걸리)|몇\s*(?:킬로|키로|미터|km|m)\s*(?:남|더)|언제\s*(?:쯤)?\s*도착|얼마\s*안\s*남|얼마나\s*(?:멀|먼)|(?:목적지|도착지)\s*(?:까지)?\s*(?:는|가|이)?\s*(?:얼마|몇|멀)|몇\s*(?:분|시간)\s*(?:더|남|걸)|도착\s*(?:하면|하는\s*게|할\s*때)\s*(?:몇|언제)|(?:거의\s*)?다\s*(?:왔|와\s*가)(?:어|나|니|지|냐|$)/.test(s) && !/산소|공기|o2|O2|숨/.test(s)) return "how far to go";
+  if (/(?:이|이쪽|이\s*길|이\s*방향|여기)\s*(?:이|으로|로)?\s*맞(?:아|나|니|는|지|$)|제대로\s*가고/.test(s)) return "what's next";
+  if (/체크\s*포인트|경유지|정류장|중간\s*지점/.test(s) && !/추가|넣어|설정|저장|에서\s*출발/.test(s)) return "next checkpoint";
+  if (/(?:어디서|언제|어디에서|어디쯤에서)\s*(?:꺾|돌아야|회전)|꺾어야|꺾는\s*(?:곳|데)|(?:왼쪽|오른쪽)\s*(?:이야|이지|인가|이에요|맞아)|^(?:여기서\s*)?(?:왼쪽|오른쪽|좌회전|우회전)\s*(?:으로)?\s*(?:꺾어|꺾을까|돌아|가야\s*돼|해야\s*돼)?$/.test(s)) return "what's next";
+  if (/^(?:(?:지금|나|저|우리|내가)\s*(?:는|은)?\s*)*(?:어디|어디쯤)\s*(?:에)?\s*(?:있|야|이야|인가|인지|와\s*있)/.test(s)) return "where am i";
+  if (/해\s*(?:가\s*)?(?:언제|몇\s*시(?:에)?)\s*(?:져|지|넘어가)|해\s*지기\s*전|어두워지기/.test(s)) return "is the sun up";
+  if (/^(?:잠시|잠시만|잠깐만|잠깐)$/.test(s)) return "pause";
+  if (/뭐\s*할\s*수\s*있|무슨\s*기능|어떤\s*기능/.test(s)) return "help";
+  if ((m = s.match(/^(목적지|도착지|출발\s*(?:지|점)|여기|현재\s*위치|지금\s*위치|내\s*위치|이곳|이\s*위치)\s*(?:를|을)?\s*(.+?)(?:으로|로|라고)\s*(?:저장|기억|등록)/))) {
+    const what = /출발/.test(m[1]) ? "the start" : /목적지|도착지/.test(m[1]) ? "the destination" : "here";
+    return `save ${what} as ${m[2]}`;
+  }
+  if ((m = s.match(/^(목적지|도착지|출발\s*(?:지|점))\s*(?:를|을)?\s*(?:바꿀래|바꿀게|바꾸자|바꿔|변경(?:할게|하자|해)?)\s+(.+?)\s*(?:으로|로)?$/)))
+    return /출발/.test(m[1]) ? `start from ${koPlace(m[2])}` : `set destination to ${koPlace(m[2])}`;
+  if ((m = s.match(/^(?:경로|루트|중간|가는\s*길)\s*(?:에|에다|중간에)\s*(.+?)\s*(?:을|를)?\s*(?:추가|넣어|끼워)/))) return `add a checkpoint at ${koPlace(m[1])}`;
+  // "B까지 A에서 어떻게 가?" (destination first)
+  if ((m = s.match(/^(.+?)까지\s+(.+?)(?:에서|부터)\s/))) return `route from ${koPlace(m[2])} to ${koPlace(m[1])}${start ? " and start" : ""}`;
   // ---- routes between two places ----
   if ((m = s.match(/^(.+?)(?:에서|부터)\s*(?:출발(?:해서|하고|해)?\s*)?(.+?)(?:을|를)?\s*(?:거쳐서?|경유해서?|들러서?|지나서?)\s*(.+?)(?:까지|으로|로)/)))
     return [`route from ${koPlace(m[1])} to ${koPlace(m[3])}${start ? "" : ""}`, `add a checkpoint at ${koPlace(m[2])}`, ...(start ? ["start navigation"] : [])];
   if ((m = s.match(/^(.+?)(?:에서|부터)\s*(?:출발해서\s*|출발하고\s*)?(.+?)(?:까지|으로|로)\s*(?:가는\s*)?(?:경로|길|루트)?\s*(?:를|을)?\s*(?:안내|계획|찾아|찾|알려|짜|만들|가|이동|데려|출발|보여|갈래|가자)?.*$/)) && !/^\s*(?:\d|북|남|동|서|왼|오른|앞|뒤)/.test(m[2]))
     return `route from ${koPlace(m[1])} to ${koPlace(m[2])}${start ? " and start" : ""}`;
-  if ((m = s.match(/^(.+?)\s*(?:에서)?\s*출발(?:해서|하고|해)\s*(.+?)\s*(?:에\s*)?(?:도착|까지|으로|로)/)))
+  if ((m = s.match(/^(.+?)\s*(?:에서)?\s*출발(?:해서|하고|해|\s)\s*(.+?)\s*(?:에\s*)?(?:도착|까지|으로|로)/)))
     return `route from ${koPlace(m[1])} to ${koPlace(m[2])}${start ? " and start" : ""}`;
   if ((m = s.match(/^(.+?)까지\s*(?:가는\s*)?(?:길|경로|루트)?\s*(?:을|를)?\s*(.+?)(?:에서|부터)\s*(?:안내|알려|찾|계획|가|출발)/)))
     return `route from ${koPlace(m[2])} to ${koPlace(m[1])}${start ? " and start" : ""}`;
   if ((m = s.match(/^(.+?)\s*(?:→|->|에서|부터)\s*(.+?)\s*(?:까지)?$/)) && !/출발|시작|돌아|복귀/.test(s) && !/^(?:\d|북|남|동|서|왼|오른|앞|뒤)/.test(m[2]))
     return `route from ${koPlace(m[1])} to ${koPlace(m[2])}`;
   if ((m = s.match(/^(.+?)(?:와|과|랑|이랑)\s*(.+?)\s*사이\s*(?:의\s*)?(?:경로|길)/))) return `route from ${koPlace(m[1])} to ${koPlace(m[2])}`;
+  // "올림푸스 산 어떻게 가?" (one place, no particle)
+  if ((m = s.match(/^(.+?)\s*(?:은|는|에|에는|까지는|까진)?\s*어떻게\s*가(?:\?|요|야|지|나|면|$)/)) && !/^(?:이제|지금|여기서|다음|앞으로|그럼|그러면|길|여기|거기)$/.test(m[1].trim())) return `take me to ${koPlace(m[1])}`;
+  if ((m = s.match(/^(.+?)\s*(?:으로|로|에|까지)?\s*가려면/)) && !/돌아$|^(?:이제|지금|여기서|다음|앞으로|그럼|거기)$/.test(m[1].trim())) return `take me to ${koPlace(m[1])}`;
+  if (/(?:원래\s*(?:있던|있었던)?|처음\s*(?:있던|있었던|출발한)|출발했던|떠났던|왔던)\s*(?:곳|데|자리|위치)\s*(?:으로|로|에)?\s*(?:돌아|복귀|귀환|가자|가\s*줘|갈래|데려|다시)/.test(s)) return "take me back to base";
+  if (/^(?:(?:이제|그만|그냥|다시|빨리|우리|얼른|자|나)\s*)+(?:돌아가|돌아갈|복귀|귀환|철수)|베이스\s*캠프\s*(?:로|으로)?\s*(?:돌아|복귀|가)/.test(s)) return "take me back to base";
   // ---- back to base ----
-  if (/(?:기지|출발\s*(?:지|점)|베이스|처음\s*(?:위치|자리)|원래\s*자리|집)\s*(?:로|으로)?\s*(?:돌아|복귀|귀환)|^(?:복귀|귀환|철수|후퇴|돌아가(?:자|기)?|되돌아가)/.test(s)) return "take me back to base";
+  if (/(?:기지|출발\s*(?:지|점)|베이스|숙소|본부|(?:처음\s*)?출발한\s*(?:곳|데|위치|자리)|처음\s*(?:위치|자리|곳)|원래\s*(?:자리|위치|곳)|집)\s*(?:쪽)?\s*(?:로|으로|에)?\s*(?:돌아|복귀|귀환|데려|다시\s*가)|집에\s*(?:가|갈|돌아)|집으로\s*(?:가|갈)|^(?:복귀|귀환|철수|후퇴|돌아가(?:자|기)?|되돌아가)/.test(s)) return "take me back to base";
+  if ((m = s.match(/^(.+?)(?:으로|로|까지|에)\s*다시\s*(?:가|이동|데려)/))) return `take me to ${koPlace(m[1])}`;
   // ---- start / destination / checkpoint ----
   // ---- shelter: "숨을 데 찾아줘", "방사선 피할 곳으로 가자", "태양 폭풍 오면 어디로 가?" ----
-  if (/대피|피난|숨을\s*(?:데|곳)|피할\s*(?:데|곳)|방사선|태양\s*(?:풍|폭풍)|플레어|차폐|가릴\s*(?:데|곳)/.test(s))
-    return /(?:데려|가자|가\s*줘|안내|이동|찾아|어디로\s*가)/.test(s) ? "take me to the nearest shelter" : "where is the shelter";
+  if (/대피|피난|피신|엄폐|안전한\s*(?:곳|데|장소)\s*(?:으로|로|에)?\s*(?:피|가|숨|데려|이동|안내)|(?:숨을|피할|가릴|대피할|숨길)\s*(?:수\s*있는\s*|만한\s*)?(?:데|곳)|(?:가려|막아)\s*줄\s*(?:만한\s*|수\s*있는\s*)?(?:데|곳)|방사선|태양\s*(?:풍|폭풍)|플레어|차폐/.test(s))
+    return /(?:데려|가자|가\s*줘|안내|이동|찾아|어디로\s*가|피신|숨자|가야|대피하자|대피해|대피시켜|피하자|피해|빨리|숨어|숨을래|숨자)/.test(s) ? "take me to the nearest shelter" : "where is the shelter";
   if ((m = s.match(/^(.+?)(?:이|가)\s*(?:목적지|도착지)/))) return `set destination to ${koPlace(m[1])}`;
   if ((m = s.match(/^(.+?)(?:이|가)\s*출발\s*(?:지|점)/))) return `start from ${koPlace(m[1])}`;
   if ((m = s.match(/^(.+?)에서\s*(?:출발|시작)/))) return `start from ${koPlace(m[1])}`;
   if ((m = s.match(/(?:지금|나|저|우리)\s*(?:는|은)?\s*(.+?)에\s*(?:있어|있어요|있다|있음|있습니다)/))) return `start from ${koPlace(m[1])}`;
-  if ((m = s.match(/출발\s*(?:지|점)\s*(?:를|을|은|는|이|가)?\s*(.+?)(?:으로|로)?\s*(?:설정|정해|바꿔|변경|해|야|이야|입니다)?$/)) && !/어디/.test(m[1])) return `start from ${koPlace(m[1])}`;
+  if ((m = s.match(/^(?:지금|나|저|우리|여기)\s*(?:는|은|가)?\s*(.+?)\s*(?:이야|야|이에요|예요|입니다|이다|임)$/)) && !hasHangul(koPlace(m[1]))) return `start from ${koPlace(m[1])}`;
+  if ((m = s.match(/^(.+?)\s*(?:을|를)\s*(?:출발\s*(?:지|점)|시작\s*(?:지점|점))\s*(?:으로|로)/))) return `start from ${koPlace(m[1])}`;
+  if ((m = s.match(/^(.+?)\s*(?:을|를)\s*(?:목적지|도착지|도착\s*지점)\s*(?:으로|로)/))) return `set destination to ${koPlace(m[1])}`;
+  if ((m = s.match(/출발\s*(?:지|점)\s*(?:를|을|은|는|이|가)?\s*(.+?)(?:으로|로)?\s*(?:설정|정해|바꿔|변경|해|야|이야|입니다)?$/)) && m[1].trim() && !/어디/.test(m[1])) return `start from ${koPlace(m[1])}`;
   if ((m = s.match(/^(.+?)(?:이|가)\s*출발\s*(?:지|점)/))) return `start from ${koPlace(m[1])}`;
-  if ((m = s.match(/(?:목적지|도착지|도착\s*지점)\s*(?:를|을|은|는|이|가)?\s*(.+?)(?:으로|로)?\s*(?:설정|정해|바꿔|변경|해|야|이야|입니다)?$/)) && !/어디/.test(m[1])) return `set destination to ${koPlace(m[1])}`;
+  if ((m = s.match(/(?:목적지|도착지|도착\s*지점)\s*(?:를|을|은|는|이|가)?\s*(.+?)(?:으로|로)?\s*(?:설정|정해|바꿔|변경|해|야|이야|입니다)?$/)) && m[1].trim() && !/어디/.test(m[1])) return `set destination to ${koPlace(m[1])}`;
   if ((m = s.match(/^(.+?)(?:이|가)\s*(?:목적지|도착지)/))) return `set destination to ${koPlace(m[1])}`;
-  if ((m = s.match(/^(.+?)(?:에|을|를)?\s*(?:체크\s*포인트|경유지|정류장|중간\s*지점)\s*(?:로|으로)?\s*(?:를|을)?\s*추가/)) || (m = s.match(/(?:체크\s*포인트|경유지)\s*(?:를|을)?\s*(.+?)(?:에|으로|로)\s*(?:추가|넣어|설정)/)) || (m = s.match(/^(.+?)(?:을|를)?\s*(?:경유|들러|거쳐)(?:해|서|가)?\s*(?:줘|가자|가)?$/)))
+  if ((m = s.match(/^(.+?)(?:에|을|를)?\s*(?:체크\s*포인트|경유지|정류장|중간\s*지점)\s*(?:로|으로)?\s*(?:를|을)?\s*추가/)) || (m = s.match(/(?:체크\s*포인트|경유지)\s*(?:를|을)?\s*(.+?)(?:에|으로|로)\s*(?:추가|넣어|설정)/)) || (m = s.match(/^(.+?)(?:을|를|에)?\s*(?:경유|들러|거쳐|들렀다|들르고)(?:해서|해|서|가)?\s*(?:줘|가자|가|갈래|가줘)?$/)))
     return `add a checkpoint at ${koPlace(m[1])}`;
   // ---- save a place ----
   if ((m = s.match(/^(여기|현재\s*위치|이곳|이\s*위치|출발\s*(?:지|점)|목적지)\s*(?:를|을)?\s*(.+?)(?:으로|로|라고)\s*(?:저장|기억|이름\s*붙|등록)/)) || (m = s.match(/^(여기|현재\s*위치|이곳|이\s*위치|출발\s*(?:지|점)|목적지)\s*(?:저장|기억)(?:해|해\s*줘)?\s*(.+)$/))) {
@@ -116,41 +151,47 @@ function one(s) {
     return `save ${what} as ${m[2].replace(/(?:으로|로|라고)?\s*(?:저장|기억).*$/, "")}`;
   }
   // ---- map, mode, detail ----
-  if (/(?:3d|3D|삼\s*차원|입체|쓰리\s*디)/.test(s)) return "3d view";
-  if (/(?:2d|2D|이\s*차원|평면\s*지도|투\s*디)/.test(s)) return "2d view";
+  if (/(?:3d|3D|(?:3|삼)\s*차원|입체|쓰리\s*디)/.test(s)) return "3d view";
+  if (/(?:2d|2D|(?:2|이)\s*차원|평면|투\s*디)/.test(s)) return "2d view";
   if (/(?:해상도|정밀|자세히|세밀)/.test(s) && /(?:높|올|분석|하게|더)/.test(s)) return "refine route terrain";
-  if (/(?:로버|차량|탐사차|차로|차\s*타고)/.test(s) && /(?:모드|바꿔|전환|변경|타고|로\s*가|갈래)/.test(s)) return "switch to rover";
-  if (/(?:도보|걷기|걸어서|우주복|걸어\s*가)/.test(s) && /(?:모드|바꿔|전환|변경|갈래|가자)/.test(s)) return "switch to on foot mode";
-  if (/(?:예시|예제|샘플|데모|기본)\s*경로/.test(s)) return "example route";
+  if (/(?:로버|차량|탐사차|차로|차\s*타고)/.test(s) && /(?:모드|바꿔|전환|변경|타고|로\s*가|갈래|갈게|갈께|탈래|탈게|타자|탈까)/.test(s)) return "switch to rover";
+  if (/^걸어\s*(?:갈게|갈께|갈래|가자|갈\s*거야)$/.test(s)) return "switch to on foot mode";
+  if (/(?:도보|걷기|걸어서|우주복|걸어\s*가)/.test(s) && /(?:모드|바꿔|전환|변경|갈래|가자|갈게|갈께|걸을게|이동할게|이동하자|이동할래)/.test(s)) return "switch to on foot mode";
+  if (/(?:예시|예제|샘플|데모|기본)\s*(?:경로|루트)|^(?:예시|샘플|데모)\s*(?:를|을)?\s*(?:보여|불러|틀어)/.test(s)) return "example route";
   if (/경로\s*(?:를|을)?\s*(?:지워|삭제|초기화|취소|없애|리셋)|처음부터\s*다시/.test(s)) return "clear route";
   // ---- guidance control ----
-  if (/(?:안내|내비|네비|길\s*안내|가이드)\s*(?:를|을)?\s*(?:종료|끝|중지|그만|멈춰|꺼|취소)|^(?:그만|종료|끝내|끝)(?:해|하자|할래)?$/.test(s)) return "end navigation";
-  if (/^(?:안내\s*)?(?:시작|출발)(?:해|하자|할게|해\s*줘)?$|(?:안내|길\s*안내|내비|네비)\s*(?:를|을)?\s*(?:시작|켜)|출발하자|^가자$|^가$|^출발$/.test(s)) return "start navigation";
-  if (/일시\s*정지|멈춰|정지|잠깐|기다려|스톱|멈춤|서\s*봐|대기/.test(s)) return "pause";
-  if (/^계속|계속\s*(?:가|진행|해)|재개|다시\s*(?:가|출발|시작|진행)|움직여/.test(s)) return "resume";
-  if (/더\s*빠르게|빨리\s*(?:감|가|진행)?|속도\s*(?:올려|높여|빠르게)|배속\s*(?:올려|높여)|가속|빠르게/.test(s) && !/얼마나/.test(s)) return "faster";
+  if (/(?:음성|소리)\s*안내\s*(?:를|을)?\s*(?:꺼|끄|없애|안\s*들)/.test(s)) return "mute";
+  if (/(?:음성|소리)\s*안내\s*(?:를|을)?\s*(?:켜|다시)/.test(s)) return "unmute";
+  if (/(?:안내|내비게이션|네비게이션|내비|네비|길\s*안내|가이드)\s*(?:를|을)?\s*(?:종료|끝|중지|그만|꺼|취소)|^(?:그만|종료|끝내|끝)(?:해|하자|할래)?$/.test(s)) return "end navigation";
+  if (/^(?:안내\s*)?(?:시작|출발)(?:해|하자|할게|해\s*줘)?$|(?:안내|길\s*안내|내비게이션|네비게이션|내비|네비)\s*(?:를|을)?\s*(?:시작|켜)|출발하자|^가자$|^가$|^출발$|^(?:(?:그럼|그러면|이제|자|좋아|그래)\s*)*(?:가자|출발|출발하자|출발할게|(?:가|출발해)\s*(?:보자|볼까))$|^(?:길\s*)?안내\s*(?:를\s*)?해\s*(?:줘|주세요|줄래)?$|^출발(?:하겠습니다|합니다|할게요|하겠음)$/.test(s)) return "start navigation";
+  if (/일시\s*(?:정지|중지)|멈춰|정지|잠깐|기다려|스톱|멈춤|서\s*봐|대기/.test(s)) return "pause";
+  if (/^계속|계속\s*(?:가|진행|해)|재개|다시\s*(?:가|출발|시작|진행)|움직여|다시\s*움직|^이어서|^(?:앞으로|정면으로)\s*(?:쭉|계속)\s*(?:가|직진)?|^쭉\s*가/.test(s)) return "resume";
+  if (/너무\s*(?:빨라|빠르)/.test(s)) return "slower";
+  if (/더\s*빠르게|빨리\s*(?:감|가|진행)?|속도\s*(?:올려|높여|빠르게|내|좀\s*내)|배속\s*(?:올려|높여)|가속|빠르게/.test(s) && !/얼마나/.test(s)) return "faster";
   if (/더\s*느리게|천천히|속도\s*(?:내려|낮춰|줄여|느리게)|배속\s*(?:내려|낮춰)|감속|느리게/.test(s)) return "slower";
-  if (/다시\s*(?:말해|한\s*번|들려)|반복|뭐라고|못\s*들었|한\s*번\s*더|다시요/.test(s)) return "repeat";
+  if (/말해도\s*(?:돼|괜찮|좋아)/.test(s)) return "unmute";
+  if (/다시\s*(?:말해|한\s*번|들려)|반복|뭐라고|못\s*들었|한\s*번\s*(?:만\s*)?더|다시요/.test(s)) return "repeat";
   if (/음소거\s*해제|소리\s*(?:켜|다시)|음성\s*(?:켜|다시)|말해도\s*돼/.test(s)) return "unmute";
-  if (/음소거|조용히|소리\s*(?:꺼|끄|없애)|음성\s*(?:꺼|끄)|말\s*하지\s*마|시끄러/.test(s)) return "mute";
-  if (/(?:hud|HUD|헤드\s*업|헬멧)\s*(?:화면)?\s*(?:을|를)?\s*(?:열어|보여|켜|띄워)/.test(s)) return "open hud";
-  if (/(?:hud|HUD|헤드\s*업|헬멧)\s*(?:을|를)?\s*(?:닫|꺼|내려)|지도\s*(?:로|화면|보여)/.test(s)) return "back to map";
-  if (/도움말|도와\s*줘|뭘\s*할\s*수|무엇을\s*할\s*수|명령어|어떻게\s*(?:써|사용)|사용법|기능/.test(s)) return "help";
+  if (/음소거|조용히|소리\s*(?:꺼|끄|없애|줄여|작게)|음성\s*(?:꺼|끄)|말\s*(?:하지\s*마|그만)|시끄러/.test(s)) return "mute";
+  if (/(?:hud|HUD|헤드\s*업|헬멧)\s*(?:화면|디스플레이)?\s*(?:을|를)?\s*(?:열어|보여|켜|띄워)|^(?:hud|HUD|헬멧)\s*(?:모드|화면|뷰)?(?:로)?(?:\s*(?:바꿔|전환))?$/.test(s)) return "open hud";
+  if (/(?:hud|HUD|헤드\s*업|헬멧)\s*(?:을|를)?\s*(?:닫|꺼|내려)|지도\s*(?:다시\s*)?(?:로|화면|보여)|지도\s*모드/.test(s)) return "back to map";
+  if (/도움말|도와\s*줘|사용\s*방법|쓰는\s*(?:법|방법)|뭘\s*할\s*수|무엇을\s*할\s*수|명령어|어떻게\s*(?:써|사용)|사용법|기능/.test(s)) return "help";
   if (/(?:어떤|무슨)\s*(?:장소|곳|사이트|지역)|장소\s*목록|갈\s*수\s*있는\s*(?:곳|데)|어디\s*갈\s*수/.test(s)) return "what places";
   // ---- questions that look like "go to" sentences ----
-  if (/^다음|어디로\s*가(?:야|면|\?|$)|어느\s*쪽(?:으로)?|이제\s*(?:어떻게|뭐|어디)|뭐\s*해야|어떻게\s*해야|어디\s*가야|길\s*(?:좀\s*)?알려|방향\s*(?:알려|어디)/.test(s) && !/(?:으로|로|까지)\s*(?:데려|가자|가\s*줘)|가는\s*(?:길|경로|방법)/.test(s)) return "what's next";
+  if (/(?:갈|가야\s*할|남은)\s*길\s*(?:은|이)?\s*(?:어떻게|어때|어딘)|앞으로\s*(?:어떻게|어디로|어느\s*쪽)|^다음|어디로\s*가(?:야|면|\?|$)|어느\s*쪽(?:으로)?|이제\s*(?:어떻게|뭐|어디)|뭐\s*해야|어떻게\s*해야|어디\s*가야|길\s*(?:좀\s*)?알려|방향\s*(?:알려|어디)/.test(s) && !/(?:으로|로|까지)\s*(?:데려|가자|가\s*줘)|가는\s*(?:길|경로|방법)/.test(s)) return "what's next";
   // "올림푸스 산 가는 길", "올림푸스 산까지 가는 경로" with no verb
   if ((m = s.match(/^(.+?)\s*(?:으로|로|까지|에)?\s*가는\s*(?:길|경로|방법|루트)\s*(?:은|는|이|가)?\s*(?:뭐야|어떻게\s*돼|알려.*|안내.*|찾아.*|보여.*)?$/))) return `take me to ${koPlace(m[1])}`;
   // ---- relative moves: "왼쪽으로 200m", "앞으로 1km 가", "북서쪽으로 2km 가줘" ----
-  if ((m = s.match(new RegExp(`^(?:(.+?)(?:에서|로부터)\\s*)?${RELS}\\s*(?:쪽|방향)?\\s*(?:으로|로)?\\s*${DM}`)))) return `take me to ${m[3]} ${m[4]} ${REL[m[2]]}`;
+  if ((m = s.match(new RegExp(`^(?:(.+?)(?:에서|로부터)\\s*)?${RELS}\\s*(?:쪽)?\\s*(?:방향)?\\s*(?:으로|로)?\\s*(?:꺾어서|돌아서|틀어서|꺾고)?\\s*${DM}`)))) return `take me to ${m[3]} ${m[4]} ${REL[m[2]]}`;
   if ((m = s.match(new RegExp(`^${DM}\\s*${RELS}`)))) return `take me to ${m[1]} ${m[2]} ${REL[m[3]]}`;
   if ((m = s.match(new RegExp(`^(?:(.+?)(?:에서|로부터)\\s*)?${DIRS}\\s*(?:으로|로)?\\s*${DM}\\s*(?:만큼\\s*)?(?:더\\s*)?${GO}?`))))
     return `take me to ${m[3]} ${m[4]} ${DIR[m[2]]}${m[1] ? ` of ${koPlace(m[1])}` : ""}`;
   if ((m = s.match(new RegExp(`^${DM}\\s*${DIRS}`)))) return `take me to ${m[1]} ${m[2]} ${DIR[m[3]]}`;
   // ---- take me to X ----
-  if ((m = s.match(/^(.+?)(?:으로|로|까지|에)\s*(?:나를\s*|우리를\s*)?(?:데려|안내|가\s*줘|가자|가고\s*싶|이동|가는\s*길|갈래|가볼래|향해|출발|가)/))) return `take me to ${koPlace(m[1])}`;
+  if ((m = s.match(/^(.+?)\s*(?:으로|로|까지|에)?\s*(?:나를\s*|우리를\s*)?(?:데려다|데려가)/))) return `take me to ${koPlace(m[1])}`;
+  if ((m = s.match(/^(.+?)(?:으로|로|까지|에)\s*(?:나를\s*|우리를\s*)?(?:(?:가는\s*)?(?:길|경로|루트)\s*(?:을|를)?\s*)?(?:데려|안내|가\s*줘|가자|가고\s*싶|이동|가는\s*길|갈래|가볼래|향해|출발|가)/))) return `take me to ${koPlace(m[1])}`;
   if ((m = s.match(/^(.+?)\s*(?:가는\s*(?:길|경로)|까지\s*(?:길|경로))\s*(?:좀\s*)?(?:알려|안내|찾아|보여)/))) return `take me to ${koPlace(m[1])}`;
-  if ((m = s.match(/^(.+?)\s*(?:가자|갈래|가고\s*싶어)$/))) return `take me to ${koPlace(m[1])}`;
+  if ((m = s.match(/^(.+?)\s*(?:가자|갈래|가고\s*싶어|가\s*볼래|가\s*보자|가\s*볼까|갈게|가\s*줘)$/)) && !/^(?:이제|그럼|그러면|자|빨리|우리|다시|같이|어서|얼른|지금|그만|좋아|이제\s*그만)$/.test(m[1].trim())) return `take me to ${koPlace(m[1])}`;
   // ---- show me X on the map ----
   if ((m = s.match(/^(?:지도(?:에서)?\s*)?(.+?)\s*(?:을|를|이|가)?\s*(?:보여|찾아\s*줘|찾아|로\s*이동|어디\s*있|어딨|위치)/)) && !/(?:대피|산소|경사|위험|해|태양)|^(?:내|현재|지금|여기|이곳|목적지|출발지)$/.test(m[1])) return `show me ${koPlace(m[1])}`;
   // ---- questions ----
@@ -160,8 +201,8 @@ function one(s) {
   if (/체크\s*포인트|경유지|다음\s*정류|중간\s*지점/.test(s)) return "next checkpoint";
   if (/해\s*(?:가\s*)?지|일몰|일출|해가|태양\s*(?:고도|위치)|그늘|그림자|어두|햇빛|밤이|낮이/.test(s)) return "is the sun up";
   if (/얼마나\s*(?:남|걸|더|가야)|남은\s*(?:거리|시간)|도착\s*(?:시간|예정|시각)|언제\s*도착|몇\s*(?:분|시간)\s*(?:남|걸)|거리가?\s*(?:얼마|몇)/.test(s)) return "how far to go";
-  if (/경사|기울기|가파|오르막|내리막|비탈/.test(s)) return "slope ahead";
-  if (/위험|바위|조심|장애물|절벽|낭떠러지|안전/.test(s)) return "any danger ahead";
+  if (/경사|기울기|가파|가팔|오르막|내리막|비탈|언덕\s*(?:있|이야|많)/.test(s)) return "slope ahead";
+  if (/위험|바위|조심|장애물|절벽|낭떠러지|안전|(?:앞에|앞쪽에|전방에)\s*(?:뭐|뭔가|무엇|뭐가)|구덩이|웅덩이|균열|큰\s*돌|돌\s*(?:있|많)|돌멩이|암석|바윗|틈새|모래\s*(?:밭|함정)|미끄러/.test(s)) return "any danger ahead";
   if (/고도|높이|해발/.test(s)) return "what is my elevation";
   if (/가장\s*높은|가장\s*낮은/.test(s)) return /높은/.test(s) ? "what is the highest point" : "what is the lowest point";
   if (/몇\s*시|현지\s*시각|지금\s*시간|시간이\s*몇|솔\s*몇/.test(s)) return "what time is it";
@@ -175,7 +216,7 @@ function one(s) {
 export function koToEnglish(raw) {
   const s = normNumbers(String(raw).trim().replace(/[.?!~…]+$/g, "").replace(/^(?:어시스턴트|내비게이터|네비게이터|자비스|헤이|저기|야)[,\s]*/, "")
     .replace(/\s*(?:좀|제발|혹시)\s+/g, " ").replace(/\s+/g, " ").trim());
-  const out = one(s);
+  const out = one(s.replace(/(?:예|제)제로(?:\s*크레이터)?/g, "jezero").replace(/^.+?\s*말고\s+(?=\S)/, ""));
   return Array.isArray(out) ? out.join(" ;; ") : out;
 }
 

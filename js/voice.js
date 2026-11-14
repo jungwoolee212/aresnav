@@ -260,7 +260,12 @@ function stopListening() {
 // ---------- understanding ----------
 const clean = (s) => s.toLowerCase().replace(/[’`]/g, "'").replace(/[!?;]+/g, " ").replace(/\.(?!\d)/g, " ")
   .replace(/^(hey |ok |okay )?(assistant|navigator|computer)[, ]+/, "").replace(/^((please|can you|could you|would you|will you|i'd like you to)\s+)+/, "")
-  .replace(/\s+please$/, "").replace(/,/g, " ").replace(/\s+/g, " ").trim();
+  .replace(/\s+please$/, "").replace(/,/g, " ").replace(/\s+/g, " ").trim()
+  // everyday phrasings for questions the parser already answers
+  .replace(/^.*\b(?:can|could|will|do) (?:i|we) (?:make it|get|walk|drive|have time to (?:get|go)) back\b.*$/, "how long to walk back")
+  .replace(/^.*\b(?:am i|are we) (?:going|heading|walking|on) (?:the )?(?:right|correct) (?:way|track|direction|route|path)\b.*$|^.*\bon (?:the right )?track\b.*$/, "what's next")
+  .replace(/^.*\b(?:are we (?:there|close)(?: yet)?|almost there|nearly there)\b.*$/, "how far to go")
+  .replace(/^.*\b(?:(?:get|take) (?:me|us) (?:to|under) cover|take cover|find cover)\b.*$/, "take me to the nearest shelter");
 
 // requests run one at a time, in the order they were said
 let queue = Promise.resolve();
@@ -510,7 +515,7 @@ function routeCommand(q) {
   if ((m = q.match(/^(?:(?:show|give|find|plan|get|tell|make)\s+(?:me\s+|us\s+)?)?(?:a\s+|the\s+)?(?:route|path|way|directions?|navigation|traverse)\s+(?:to|towards?|for)\s+(.+)$/))
     || (m = q.match(/^(?:how (?:do|can|would|should) (?:i|we) (?:get|go|walk|drive) to|how to get to|how far is it to|i want a route to)\s+(.+)$/)))
     return setRoute({ end: m[1], fromHere: true });
-  if ((m = q.match(/^(?:show(?: me)?|fly to|zoom to|go to the site|take me to the site|open|jump to|move the map to)\s+(.+)$/)) && !nav)
+  if ((m = q.match(/^(?:show(?: me)?|fly to|zoom to|go to the site|take me to the site|open|jump to|move the map to)\s+(.+)$/)) && !nav && !/\b(?:hud|helmet|heads.?up|map|example|demo|3d|2d|settings|help)\b/.test(m[1]))
     return resolvePlace(m[1]).then((p) => { if (p.error) return p.error; if (p.site) C.flyTo(p.site); else C.flyTo({ lat: p.lat, lon: p.lon, zoom: 15 });
       return `Showing ${p.name}. Say start from a place there, or tap the map, to plan a route.`; });
   if ((m = q.match(/^(?:(?:plan|make|find|give me|show me|get me|set|create|i need|i want)\s+(?:me\s+)?(?:a\s+|the\s+)?(?:route|path|way|traverse)\s+)?(?:(?:route|path|go|walk|drive|navigate)\s+)?from\s+(.+?)\s+to\s+(.+?)(?:\s+(?:and|then)\s+(start|go|navigate|begin|guide me)\b.*)?$/)))
