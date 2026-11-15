@@ -1,6 +1,6 @@
 # AresNav: Mars EVA Navigator
 
-**Live demo: [jungwoolee212.github.io/mars-eva-navigator](https://jungwoolee212.github.io/mars-eva-navigator/)**. It runs in the browser with nothing to install. An example route is already planned when it opens: press *Start*.
+**Live demo: [jungwoolee212.github.io/aresnav](https://jungwoolee212.github.io/aresnav/)**. It runs in the browser with nothing to install. An example route is already planned when it opens: press *Start*.
 
 ![Route planning on lower Mount Sharp: the safest walking route, hazard overlay and safety checks](docs/plan.jpg)
 
@@ -134,7 +134,7 @@ Push to a public GitHub repo. Then go to **Settings → Pages → Deploy from a 
 
 ## Use of AI (SI) tools
 
-- **Code.** code, data-processing scripts and this README were written with an AI coding assistant, Claude Code (Anthropic's Claude models), under the team's direction. The team chose the design, set the requirements and data sources, and tested and reviewed the results.
+- **Code.** The code, data-processing scripts and this README were written with an AI coding assistant, Claude Code (Anthropic's Claude models), under the team's direction. The team chose the design, set the requirements and data sources, and tested and reviewed the results.
 - **Data.** No data in this app is AI-generated. Terrain, elevation, imagery and place names come from NASA Mars Trek. AI-written scripts in `tools/` process that data into `data/`, `js/catalog.js` and `js/places.js`.
 - **In the app.** The voice assistant runs onboard without AI by default. If a user pastes their own Claude API key in Settings, questions the onboard parser can't handle go to Claude (`claude-opus-5-5`). This is optional and off by default.
 - **Images and video.** None of the images in the app are AI-generated. No NASA logos, flags or mission insignia are used.
