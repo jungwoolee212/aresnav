@@ -6,6 +6,7 @@ export const DEFAULTS = {
   maxSlope: 25,        // deg; never route the crew over steeper ground
   plssHours: 8.0,      // portable life-support duration
   reserveHours: 1.0,   // kept untouched for contingencies
+  loadKg: 10,          // tools and samples carried on top of the suit (sets how hard the walk is)
   risk: 1.0,           // 0 = fastest, 3 = keep furthest from steep/rocky ground
   startLMST: "09:00",  // EVA start, local mean solar time at Gale
   checkpointMin: 15,   // default time spent at a checkpoint

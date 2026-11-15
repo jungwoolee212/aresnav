@@ -677,7 +677,7 @@ function spaceWxAnswer() {
 const O2_HOW = /how (is|are|do you|does it|did you)?.*(oxygen|o2).*(calculat|work|estimat|plan|decid|determin|comput|figure)|oxygen (plan|model|calculation|estimate)|where does the oxygen/;
 function o2How() {
   const o = C.S.opts, r = o.reserveHours;
-  return `Oxygen here is a planning estimate, not a sensor reading. The suit is assumed to last ${o.plssHours} hours at a steady rate, with ${r} hour${r === 1 ? "" : "s"} kept in reserve. At every point, the time already out plus the time to walk back to the start must fit in what's left. The route report's Oxygen plan shows this along the whole route.`;
+  return `Oxygen here is a planning estimate, not a sensor reading. The suit is rated for ${o.plssHours} hours of walking on the flat, with ${r} hour${r === 1 ? "" : "s"} kept in reserve. Climbs, a heavier load and rocky ground use it faster, and standing uses less. At every point, the oxygen already used plus the oxygen to walk back to the start must fit in what's left. The route report's Oxygen plan shows this along the whole route.`;
 }
 function planAnswer(q) {
   if (O2_HOW.test(q)) return o2How();

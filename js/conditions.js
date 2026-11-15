@@ -89,3 +89,18 @@ export function stormNow(sw, now = Date.now()) {
   if (!sw?.impacts) return null;
   return sw.impacts.find((i) => i.arrival > now - 36 * 3600e3 && i.arrival < now + 72 * 3600e3) || null;
 }
+
+// Oxygen use follows effort. Relative metabolic cost from the Pandolf et al. (1977) load-carriage equation,
+//   M = 1.5·W + 2·(W+L)·(L/W)² + η·(W+L)·(1.5·v² + 0.35·v·G)     [W, L in kg; v in m/s; G grade in %]
+// with W = crew + suit (75 + 60 kg), L = carried load and η a terrain factor (1.1 smooth … 1.7 rocky).
+// The suit's rated duration is taken to hold for walking on the flat at the planned pace with the default
+// load, so the result is a multiplier on that rate: >1 on climbs and with heavy loads, <1 when standing.
+// Downhill is counted like the flat (Pandolf under-predicts downhill cost). Gravity scales every term alike,
+// so it cancels in the ratio.
+export const CREW_SUIT_KG = 135, REF_LOAD_KG = 10;
+const pandolf = (W, L, v, G, eta) => 1.5 * W + 2 * (W + L) * (L / W) ** 2 + eta * (W + L) * (1.5 * v * v + 0.35 * v * Math.max(0, G));
+export function effortModel(opts) {
+  const W = CREW_SUIT_KG, L = Math.max(0, opts.loadKg ?? REF_LOAD_KG);
+  const ref = pandolf(W, REF_LOAD_KG, opts.flatSpeed / 3.6, 0, 1.2);
+  return (grade, v, rough = 0) => pandolf(W, L, Math.max(0, v), grade * 100, 1.1 + 0.6 * Math.min(1, Math.max(0, rough))) / ref;
+}

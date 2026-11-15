@@ -28,8 +28,8 @@ const RULES = [
 ];
 // check subtitles from app.js assess()
 const SUBS = [
-  [/^Out (.+) \+ back (.+) = (.+) of (.+) usable \((.+) h suit − (.+) h reserve\)\. (?:Lowest walk-back margin (.+)\.|Walk-back margin runs out (.+) along\.)$/,
-    (_, o, b, n, u, s, r, low, out) => `가는 데 ${dur(o)} + 돌아오는 데 ${dur(b)} = ${dur(n)} / 사용 가능 ${dur(u)} (우주복 ${s}시간 − 예비 ${r}시간). ${low ? `최저 귀환 여유 ${dur(low)}.` : `${out} 지점에서 귀환 여유가 바닥납니다.`}`],
+  [/^(?:O₂ out|Out) (.+) \+ back (.+) = (.+) of (.+) usable \((.+) h suit − (.+) h reserve\)\. (?:Lowest walk-back margin (.+)\.|Walk-back margin runs out (.+) along\.)$/,
+    (_, o, b, n, u, s, r, low, out) => `산소: 가는 데 ${dur(o)} + 돌아오는 데 ${dur(b)} = ${dur(n)} / 사용 가능 ${dur(u)} (우주복 ${s}시간 − 예비 ${r}시간). ${low ? `최저 귀환 여유 ${dur(low)}.` : `${out} 지점에서 귀환 여유가 바닥납니다.`}`],
   [/^Sunrise (\S+), sunset (\S+) LMST today\. (?:Back at the start|Arrive) by (\S+)\.$/, "오늘 일출 $1, 일몰 $2 LMST. $3까지 마칩니다."],
   [/^(\d+) steep sections? · (\d+) rocky stretch(?:es)?\. Open the report for where\.$/, "급경사 $1구간 · 바위 지대 $2구간. 위치는 보고서에서 확인하세요."],
   [/^No sections over (\S+)°\. (\d+) rocky stretch(?:es)?\.$/, "$1°를 넘는 구간 없음. 바위 지대 $2구간."],

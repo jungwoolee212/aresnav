@@ -12,7 +12,7 @@ import { renderTerrainView } from "./terrain3d.js";
 import { openHud, closeHud, hudIsOpen, updateHud } from "./hud.js";
 import { initVoice, voiceNavStart, voiceNavEnd, voiceTick, voiceToggleListen, voiceLang, voiceAsk } from "./voice.js";
 import { nameKo } from "./voice-ko.js";
-import { commsAlongRoute, walkDoseUSv, RAD_USV_PER_DAY, dustSeason, marsSpaceWeather, stormNow, BASE_ANT_M, SUIT_ANT_M } from "./conditions.js";
+import { commsAlongRoute, walkDoseUSv, RAD_USV_PER_DAY, dustSeason, marsSpaceWeather, stormNow, BASE_ANT_M, SUIT_ANT_M, effortModel, CREW_SUIT_KG } from "./conditions.js";
 import { curiosityLegs, compareWithCuriosity, GEO_TILES, routeGeology, toGPX, download, openRouteSheet } from "./extras.js";
 import { uiKo, navKo, applyStatic } from "./ui-ko.js";
 import { inExtent, normLon, sourcesFor, sourceLabel, corridorFor, covers, buildSite, hasData } from "./terrain-live.js";
@@ -679,6 +679,20 @@ function analyse(tr) {
     const v = prof.speed((b.elev - a.elev) / d, (a.rough + b.rough) / 2, b.slope) / 3.6;
     back[i] = back[i - 1] + d / Math.max(v, 0.05);
   }
+  // oxygen used, weighted by effort (grade over ~50 m, pace, load, ground): "seconds at the flat-walking rate"
+  const eff = effortModel(S.opts), o2Out = new Float32Array(pts.length), o2Back = new Float32Array(pts.length);
+  const gradeAt = (d) => { const a = pts[idxAtDist(pts, Math.max(0, d - 25))], b = pts[idxAtDist(pts, Math.min(tr.total.dist, d + 25))];
+    return b.dist - a.dist > 5 ? (b.elev - a.elev) / (b.dist - a.dist) : 0; };
+  let effMax = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1], b = pts[i], d = b.dist - a.dist, r = (a.rough + b.rough) / 2, g = gradeAt((a.dist + b.dist) / 2);
+    const dt = b.t - a.t, fo = dt > 0 ? eff(d > 0.01 ? g : 0, d / dt, r) : 1;
+    o2Out[i] = o2Out[i - 1] + Math.max(0, dt) * fo;
+    const db = back[i] - back[i - 1], fb = db > 0 ? eff(-g, d / db, r) : 1;
+    o2Back[i] = o2Back[i - 1] + db * fb;
+    if (d > 0.01) effMax = Math.max(effMax, fo);
+  }
+  const effAvg = pts[pts.length - 1].t > 0 ? o2Out[pts.length - 1] / pts[pts.length - 1].t : 1;
   // samples every 25 m: sky view (terrain shielding) and sun / shadow at the time you pass
   const samples = [];
   const step = Math.max(25, site.cell_m, tr.total.dist / 400);
@@ -732,19 +746,19 @@ function analyse(tr) {
   // radio line of sight from the base antenna at the route start to the crew, at every sample
   const comms = commsAlongRoute(site, samples, pts[0]);
   samples.forEach((s, k) => { s.los = comms.los[k]; });
-  return { step, back, samples, shelter, dangers: D, emin, emax, smax, skyAvg, shadeFrac, comms, day: daylight(today), Ls: sunAt(12, today).Ls };
+  return { step, back, o2Out, o2Back, effAvg, effMax, samples, shelter, dangers: D, emin, emax, smax, skyAvg, shadeFrac, comms, day: daylight(today), Ls: sunAt(12, today).Ls };
 }
 
 function assess(tr, A) {
   const o = S.opts, walk = tr.kind === "walk", t0 = startSec(), tot = tr.total, C = [];
   const backEnd = A.back[A.back.length - 1];
   if (walk) {
-    const usable = (o.plssHours - o.reserveHours) * 3600, need = tot.time + backEnd;
+    const usable = (o.plssHours - o.reserveHours) * 3600, outO2 = A.o2Out[A.o2Out.length - 1], backO2 = A.o2Back[A.o2Back.length - 1], need = outO2 + backO2;
     let minM = Infinity, at = 0;
-    tr.pts.forEach((p, i) => { const m = usable - p.t - A.back[i]; if (m < minM) { minM = m; at = p.dist; } });
+    tr.pts.forEach((p, i) => { const m = usable - A.o2Out[i] - A.o2Back[i]; if (m < minM) { minM = m; at = p.dist; } });
     const lvl = need <= usable * 0.85 ? "ok" : need <= usable ? "warn" : "bad";
     C.push({ lvl, title: lvl === "bad" ? "Not enough oxygen to walk back" : lvl === "warn" ? "Oxygen is tight for the walk back" : "Enough oxygen to walk back",
-      sub: `Out ${dur(tot.time)} + back ${dur(backEnd)} = ${dur(need)} of ${dur(usable)} usable (${o.plssHours} h suit − ${o.reserveHours} h reserve). ${minM < 0 ? `Walk-back margin runs out ${distTxt(at)} along.` : `Lowest walk-back margin ${dur(minM)}.`}` });
+      sub: `O₂ out ${dur(outO2)} + back ${dur(backO2)} = ${dur(need)} of ${dur(usable)} usable (${o.plssHours} h suit − ${o.reserveHours} h reserve). ${minM < 0 ? `Walk-back margin runs out ${distTxt(at)} along.` : `Lowest walk-back margin ${dur(minM)}.`}` });
   }
   if (A.comms) {
     const cm = A.comms, out = cm.runs.reduce((s, r) => s + r.len, 0);
@@ -898,7 +912,7 @@ function oxygenCard(tr, A) {
     ? "로버 이동이라 우주복 산소를 쓰지 않아요. 로버 생명유지장치는 이 앱에서 계산하지 않습니다."
     : "Rover traverse: suit oxygen isn't drawn, and the rover's cabin life support isn't modelled here."}</p></div>`;
   const usable = (o.plssHours - o.reserveHours) * 3600, D = (s) => (ko ? navKo.dur(s) : dur(s));
-  const margin = (i) => usable - pts[i].t - A.back[i];
+  const margin = (i) => usable - A.o2Out[i] - A.o2Back[i];
   let minI = 0; pts.forEach((_, i) => { if (margin(i) < margin(minI)) minI = i; });
   // rows: start, quarter points, every stop, the tightest point and the destination
   const idx = new Set([0, pts.length - 1, minI]);
@@ -907,17 +921,18 @@ function oxygenCard(tr, A) {
   const rows = [...idx].sort((a, b) => a - b).map((i) => {
     const m = margin(i), cls = m < 0 ? "bad" : m < 1800 ? "warn" : "";
     const where = i === 0 ? (ko ? "출발" : "Start") : i === pts.length - 1 ? (ko ? "도착" : "Destination") : distTxt(pts[i].dist);
-    return `<tr${i === minI ? ' class="tight"' : ""}><td>${where}${i === minI && i !== 0 ? (ko ? " · 가장 빠듯" : " · tightest") : ""}</td><td>${D(pts[i].t)}</td><td>${D(o.plssHours * 3600 - pts[i].t)}</td><td>${D(A.back[i])}</td><td class="${cls}">${m < 0 ? "−" + D(-m) : D(m)}</td></tr>`;
+    return `<tr${i === minI ? ' class="tight"' : ""}><td>${where}${i === minI && i !== 0 ? (ko ? " · 가장 빠듯" : " · tightest") : ""}</td><td>${D(pts[i].t)}</td><td>${D(o.plssHours * 3600 - A.o2Out[i])}</td><td>${D(A.o2Back[i])}</td><td class="${cls}">${m < 0 ? "−" + D(-m) : D(m)}</td></tr>`;
   }).join("");
   const strip = A.samples.map((s) => { const m = margin(Math.min(pts.length - 1, s.i));
     return `<i style="flex:1;background:${m < 0 ? "#e9354f" : m < 1800 ? "#f5c84b" : "#2fd68f"}"></i>`; }).join("");
   return `<div class="card"><div class="eyebrow">${ko ? "산소 계획 · 계획용 예상치, 센서 값 아님" : "Oxygen plan · planning estimate, not a sensor reading"}</div>
     <div class="kv"><div>${ko ? "우주복 산소" : "Suit oxygen"}<b>${fmt(o.plssHours, 1)} h</b></div><div>${ko ? "예비" : "Reserve"}<b>${fmt(o.reserveHours, 1)} h</b></div><div>${ko ? "사용 가능" : "Usable"}<b>${D(usable)}</b></div></div>
-    <table class="o2-table"><thead><tr><th>${ko ? "위치" : "Where"}</th><th>${ko ? "경과" : "Time out"}</th><th>${ko ? "산소 잔량" : "O₂ left"}</th><th>${ko ? "돌아가는 시간" : "Walk back"}</th><th>${ko ? "귀환 여유" : "Margin"}</th></tr></thead><tbody>${rows}</tbody></table>
+    <div class="kv"><div>${ko ? "짐" : "Carried load"}<b>${fmt(o.loadKg ?? 10)} kg</b></div><div>${ko ? "평균 노력" : "Avg effort"}<b>×${fmt(A.effAvg, 2)}</b></div><div>${ko ? "최대 노력" : "Peak effort"}<b>×${fmt(A.effMax, 2)}</b></div></div>
+    <table class="o2-table"><thead><tr><th>${ko ? "위치" : "Where"}</th><th>${ko ? "경과" : "Time out"}</th><th>${ko ? "산소 잔량" : "O₂ left"}</th><th>${ko ? "귀환에 드는 산소" : "O₂ to walk back"}</th><th>${ko ? "귀환 여유" : "Margin"}</th></tr></thead><tbody>${rows}</tbody></table>
     <div class="strip">${strip}</div><div class="legend-row" style="justify-content:space-between"><span>${ko ? "출발" : "start"}</span><span>${ko ? "초록 = 여유 30분 이상 · 노랑 = 빠듯 · 빨강 = 부족" : "green = 30 min+ margin · yellow = tight · red = short"}</span><span>${ko ? "도착" : "end"}</span></div>
     <p class="small">${ko
-      ? `계산 방법: 우주복 산소가 일정하게 줄어 ${fmt(o.plssHours, 1)}시간 간다고 가정하고(설정 → 우주복 산소), ${fmt(o.reserveHours, 1)}시간은 비상용으로 남겨요. 경로의 모든 지점에서 <b>지금까지 쓴 시간 + 같은 길로 출발지까지 걸어 돌아가는 시간</b>이 사용 가능한 산소 안에 들어와야 해요. 그 차이가 <b>귀환 여유</b>예요. 안내 중에는 지난 시간만큼 산소 잔량이 줄고, 현재 위치에서 다시 계산해요. 실제 소모는 운동량, 경사, 우주복에 따라 달라서, 실제 장비에서는 우주복의 산소 측정값으로 바꿔야 해요.`
-      : `How it's planned: the suit is assumed to use oxygen at a steady rate and last ${fmt(o.plssHours, 1)} h (Settings → Suit oxygen), with ${fmt(o.reserveHours, 1)} h kept for emergencies. At every point on the route, <b>time already out + time to walk back to the start along the same path</b> must fit in the usable oxygen; what's left over is the <b>walk-back margin</b>. During guidance, O₂ left counts down with elapsed time and the margin is recomputed from where you are. Real use varies with effort, slope and the suit, so a real system would replace this with the suit's own oxygen readings.`}</p></div>`;
+      ? `계산 방법: 우주복 산소는 <b>평지를 계획 속도로 걸을 때</b> ${fmt(o.plssHours, 1)}시간 가는 것으로 보고(설정 → 우주복 산소), ${fmt(o.reserveHours, 1)}시간은 비상용으로 남겨요. 오르막·빠른 걸음·무거운 짐·바위 지대에서는 더 빨리 줄고, 멈춰 있을 때는 덜 줄어요(Pandolf 1977 하중 보행식으로 평지 대비 노력 배수를 계산, 대원+우주복 ${CREW_SUIT_KG} kg + 짐). 경로의 모든 지점에서 <b>지금까지 쓴 산소 + 같은 길로 출발지까지 걸어 돌아가는 데 드는 산소</b>가 사용 가능한 산소 안에 들어와야 하고, 남는 만큼이 <b>귀환 여유</b>예요. 표의 시간은 모두 "평지 보행 기준 산소 시간"이에요. 센서 값이 아닌 계획용 추정이라, 실제 장비에서는 우주복의 산소 측정값으로 바꿔야 해요.`
+      : `How it's planned: the suit is rated for ${fmt(o.plssHours, 1)} h <b>walking on the flat at the planned pace</b> (Settings → Suit oxygen), with ${fmt(o.reserveHours, 1)} h kept for emergencies. Climbs, a faster pace, a heavier load and rocky ground use it faster, and standing still uses less (effort relative to the flat from the Pandolf 1977 load-carriage equation, crew + suit ${CREW_SUIT_KG} kg plus the load). At every point, <b>oxygen already used + oxygen to walk back to the start along the same path</b> must fit in the usable oxygen; what's left over is the <b>walk-back margin</b>. All times in the table are oxygen in "hours of flat walking". It's a planning estimate, not a sensor reading: a real system would use the suit's own oxygen readings.`}</p></div>`;
 }
 
 // Radio contact, radiation dose, dust season and space weather for the route report
@@ -1124,7 +1139,7 @@ function renderAbout() {
   $("#aboutBody").innerHTML = `
     <h3>The site</h3><p>${esc(ABOUT_SITE)} Routes can be planned anywhere on Mars. Dotted outlines mark the ${CATALOG.dems.length} regions where Trek has a sharp regional elevation model (green: HiRISE ~1 m, purple: CTX / HRSC); elsewhere only the global 200 m blend exists, which is good for reconnaissance but can't show cliffs or boulder fields. The orange dashed box is the ground analysed for the current route: ${fmt((S.site.nx * S.site.cell_m) / 1000, 1)} × ${fmt((S.site.ny * S.site.cell_m) / 1000, 1)} km on a ${fmt(S.site.cell_m)} m grid from ${S.site.live ? `${esc(sourceLabel(S.site.source))}${S.site.rock ? `, rock density from ${esc(S.site.rock.mosaic)}` : ", rock density not assessed (no HiRISE mosaic)"}` : "the prebuilt lower Mount Sharp data"}. Context: NASA's <a href="https://science.nasa.gov/resource/curiositys-proposed-path-up-mount-sharp/" target="_blank" rel="noopener">Curiosity's proposed path up Mount Sharp</a>.</p>
     <h3>Radio contact, dose, dust and space weather</h3><p><b>Radio:</b> line of sight from a 5 m base antenna at the route start to a 2 m suit antenna, over the terrain grid and the planet's curvature; relay orbiters aren't modelled. <b>Dose:</b> Curiosity RAD's ~640 µSv/day on the surface at Gale (Hassler et al. 2014), scaled by time outside and the route's average open sky; a rough estimate. <b>Dust:</b> Ls 180°–330° is dust-storm season (climatology; no public Mars dust forecast exists). <b>Space weather:</b> CMEs that NASA DONKI's WSA-ENLIL model runs predict to reach Mars, refreshed at most every 3 hours and kept for offline use.</p>
-    <h3>How oxygen is planned</h3><p>A planning estimate, not a sensor reading. The suit is assumed to use oxygen at a steady rate over its rated time (Settings → Suit oxygen, default 8 h), with 1 h kept in reserve. At every point the time already out plus the time to walk back to the start along the same path must fit in the usable oxygen; the leftover is the walk-back margin. The route report's <b>Oxygen plan</b> shows it along the whole route, and guidance warns when the margin runs low. Real use varies with effort, slope and the suit.</p>
+    <h3>How oxygen is planned</h3><p>A planning estimate, not a sensor reading. The suit's rated time (Settings → Suit oxygen, default 8 h, 1 h kept in reserve) is taken to hold for walking on the flat at the planned pace; climbs, pace, carried load (Settings → Carried load) and rocky ground scale the use up or down with the Pandolf et al. 1977 load-carriage equation. At every point the time already out plus the time to walk back to the start along the same path must fit in the usable oxygen; the leftover is the walk-back margin. The route report's <b>Oxygen plan</b> shows it along the whole route, and guidance warns when the margin runs low. Real use varies with effort, slope and the suit.</p>
     <h3>How a route is planned</h3><ul>
       <li>A* search over the grid finds the quickest path, with extra cost near steep or rocky ground (the <i>route preference</i> setting).</li>
       <li>Crew on foot: no ground steeper than ${S.opts.maxSlope}°; walking speed from Tobler's hiking function, slowed by rocks.</li>
@@ -1146,7 +1161,7 @@ function renderAbout() {
 // ---------------- settings ----------------
 function bindSettings() {
   const o = S.opts;
-  const rng = [["#inSpeed", "#oSpeed", "flatSpeed", (v) => fmt(v, 1)], ["#inSlope", "#oSlope", "maxSlope", fmt], ["#inPlss", "#oPlss", "plssHours", (v) => fmt(v, 1)],
+  const rng = [["#inSpeed", "#oSpeed", "flatSpeed", (v) => fmt(v, 1)], ["#inSlope", "#oSlope", "maxSlope", fmt], ["#inPlss", "#oPlss", "plssHours", (v) => fmt(v, 1)], ["#inLoad", "#oLoad", "loadKg", fmt],
     ["#inRisk", "#oRisk", "risk", (v) => (v < 0.5 ? "fastest" : v < 1.5 ? "balanced" : v < 2.5 ? "cautious" : "safest")],
     ["#inRvSpeed", "#oRvSpeed", "roverSpeed", (v) => fmt(v, 1)], ["#inRvSlope", "#oRvSlope", "roverMaxSlope", fmt], ["#inRvRough", "#oRvRough", "roverMaxRough", (v) => fmt(v * 100) + "%"]];
   const sync = () => { for (const [i, out, k, f] of rng) { $(i).value = o[k]; $(out).textContent = f(o[k]); } $("#inStart").value = o.startLMST; };
@@ -1175,7 +1190,11 @@ function live(t) {
   let slopeAhead = 0; for (let k = i; k < pts.length && pts[k].dist <= st.dist + 50; k++) slopeAhead = Math.max(slopeAhead, pts[k].slope);
   const out = { t, st, man, after, distTo, lmst, sun, shade, sky: smp.sky, los: smp.los !== false, slopeAhead, back, walk,
     arrive: startSec() + tr.total.time, remainDist: tr.total.dist - st.dist, remainTime: Math.max(0, tr.total.time - t), done: t >= tr.total.time };
-  if (walk) { out.o2Left = o.plssHours * 3600 - t; out.margin = out.o2Left - o.reserveHours * 3600 - back; }
+  if (walk) {
+    const lerp = (arr) => arr[i] + (arr[Math.min(i + 1, pts.length - 1)] - arr[i]) * Math.min(1, Math.max(0, f));
+    const used = t >= tr.total.time ? A.o2Out[pts.length - 1] + (t - tr.total.time) * 0.65 : lerp(A.o2Out);
+    out.o2Left = o.plssHours * 3600 - used; out.o2Back = lerp(A.o2Back); out.margin = out.o2Left - o.reserveHours * 3600 - out.o2Back;
+  }
   else {
     const a = pts[i], b = pts[Math.min(i + 1, pts.length - 1)];
     out.speed = b.t > a.t ? ((b.dist - a.dist) / (b.t - a.t)) * 3.6 : 0;
