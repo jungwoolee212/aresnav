@@ -15,6 +15,7 @@ import { PLACES, SITES } from "./mission.js";
 import { PLACES_DATA } from "./places.js";
 import { inExtent } from "./terrain-live.js";
 import { hasHangul, koToEnglish, koPlace, enToKo, romanize } from "./voice-ko.js";
+import { walkDoseUSv, RAD_USV_PER_DAY, dustSeason, cachedSpaceWeather, stormNow } from "./conditions.js";
 
 const $ = (s) => document.querySelector(s);
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -164,7 +165,7 @@ if ("speechSynthesis" in window) window.speechSynthesis.addEventListener?.("voic
 // ---------- automatic guidance ----------
 // intro: undefined = standard spoken start, false = silent (the caller speaks), string = say this first
 export function voiceNavStart(Lv, intro) {
-  ann = { far: new Set(), now: new Set(), alert: "", alertAt: 0, t: Lv.t };
+  ann = { far: new Set(), now: new Set(), alert: "", alertAt: 0, t: Lv.t, los: Lv.los !== false };
   placePanel("nav");
   const S = C.S;
   if (S.start && S.start.name !== "Current position") home = { lat: S.start.lat, lon: S.start.lon, name: S.start.name || "the start" };
@@ -172,7 +173,8 @@ export function voiceNavStart(Lv, intro) {
   if (m && m.type === "depart") { ann.far.add(m); ann.now.add(m); }
   if (intro === false) return;
   const first = m ? `${m.text}${m.sub ? `, ${m.sub}` : ""}. ` : "";
-  say(`${intro ? `${intro} ` : ""}Guidance started. ${first}${spokenDist(tr.total.dist)} to go, about ${spokenDur(tr.total.time)}. Arrival around ${hhmm(Lv.arrive)} local time.`, 2);
+  const storm = stormNow(cachedSpaceWeather());
+  say(`${intro ? `${intro} ` : ""}Guidance started. ${first}${spokenDist(tr.total.dist)} to go, about ${spokenDur(tr.total.time)}. Arrival around ${hhmm(Lv.arrive)} local time.${storm ? ` ${stormSentence(storm)}` : ""}`, 2);
 }
 export function voiceNavEnd() {
   ann = null; stopListening();
@@ -194,6 +196,11 @@ export function voiceTick(Lv) {
     if (now - ann.alertAt > 4000) { say(`Caution. ${Lv.alert}.`, 2); ann.alert = Lv.alert; ann.alertAt = now; }
   } else if (!Lv.alert) ann.alert = "";
 
+  if (Lv.los !== ann.los && !Lv.done) {
+    ann.los = Lv.los;
+    if (!Lv.los) { const run = (C.S.ana.comms?.runs || []).find((r) => { const pad = C.S.ana.step || 25; return r.from <= Lv.st.dist + pad && r.to >= Lv.st.dist - pad; }); say(`Entering radio shadow${run ? ` for about ${spokenDist(Math.max(25, run.to - Lv.st.dist))}` : ""}. Guidance continues offline.`, 1); }
+    else say("Back in line of sight with base.", 1);
+  }
   if (Lv.done) return;
   const m = Lv.man;
   if (!m || Lv.st.dwell > 0) return;
@@ -643,6 +650,29 @@ async function savePlace(what, name) {
 }
 
 // ---------- answers ----------
+// radio contact, radiation dose, space weather and dust (planning or guidance)
+const ASK_COMMS = /\b(radio|comms?|communication|contact with (the )?base|signal|line of sight|reach (the )?base)\b/;
+const ASK_DOSE = /\b(dose|dosage|how much radiation|radiation (level|exposure|dose))\b/;
+const ASK_SPACEWX = /\b(space weather|solar storm|cme|solar flare|coronal|dust storm|dust season)\b/;
+function stormSentence(s) { return `Space weather: a solar storm is predicted to reach Mars around ${new Date(s.arrival).toISOString().slice(5, 16).replace("T", " ")} UTC${s.glancing ? ", a glancing blow" : ""}. Know your nearest shelter.`; }
+function commsAnswer(Lv) {
+  const cm = C.S.ana?.comms; if (!cm) return "There's no route yet.";
+  const here = Lv ? (Lv.los ? "You're in line of sight with base. " : "You're in radio shadow: no line of sight to base. ") : "";
+  if (!cm.runs.length) return `${here}Line of sight to base on 100 percent of the route. No radio shadow on this route.`;
+  return `${here}Line of sight to base on ${Math.round(cm.frac * 100)} percent of the route. Longest radio shadow is ${spokenDist(cm.longest.len)}, starting ${spokenDist(cm.longest.from)} along. Guidance keeps working offline in radio shadow.`;
+}
+function doseAnswer() {
+  const S = C.S, A = S.ana, tr = S.track; if (!A || !tr) return "There's no route yet.";
+  const secs = tr.total.time + (tr.kind === "walk" ? A.back[A.back.length - 1] : 0);
+  return `Estimated radiation dose for this walk: about ${Math.round(walkDoseUSv(secs, A.skyAvg))} microsieverts. That's from Curiosity's measured ${RAD_USV_PER_DAY} microsieverts a day on open ground, scaled by how much sky the terrain leaves open. A solar particle event can raise this many times.`;
+}
+function spaceWxAnswer() {
+  const A = C.S.ana, sw = cachedSpaceWeather(), s = stormNow(sw), parts = [];
+  if (!sw) parts.push("Space weather data isn't loaded yet. Open the route report while connected to fetch it from NASA DONKI.");
+  else parts.push(s ? stormSentence(s) : "No solar storm is predicted to reach Mars in the next 3 days.");
+  if (A) parts.push(dustSeason(A.Ls) ? `It's dust storm season on Mars (Ls ${Math.round(A.Ls)} degrees). Regional dust storms are common now.` : `It's not dust storm season on Mars (Ls ${Math.round(A.Ls)} degrees).`);
+  return parts.join(" ");
+}
 // how the oxygen numbers are worked out (asked while planning or during guidance)
 const O2_HOW = /how (is|are|do you|does it|did you)?.*(oxygen|o2).*(calculat|work|estimat|plan|decid|determin|comput|figure)|oxygen (plan|model|calculation|estimate)|where does the oxygen/;
 function o2How() {
@@ -651,6 +681,9 @@ function o2How() {
 }
 function planAnswer(q) {
   if (O2_HOW.test(q)) return o2How();
+  if (ASK_COMMS.test(q)) return commsAnswer(null);
+  if (ASK_DOSE.test(q)) return doseAnswer();
+  if (ASK_SPACEWX.test(q) && !/take me|shelter|hide|cover/.test(q)) return spaceWxAnswer();
   if (has(q, /\b(highest|lowest|summit)\b/)) {
     const p = extreme(has(q, /lowest/) ? -1 : +1);
     return p.error || `The ${p.name.replace(/ \(.*/, "").toLowerCase()} in the analysed area is at ${Math.round(C.S.site.elev[cellOf(C.S.site, p.lat, p.lon)])} metres. Say take me to the ${has(q, /lowest/) ? "lowest" : "highest"} point to plan a route there.`;
@@ -680,6 +713,9 @@ function answer(q, Lv) {
   const remain = () => Lv.done ? "You've arrived." : `${spokenDist(Lv.remainDist)} to go, about ${spokenDur(Lv.remainTime)}. You'll arrive around ${hhmm(Lv.arrive)} local time.`;
 
   if (O2_HOW.test(q)) return o2How();
+  if (ASK_COMMS.test(q)) return commsAnswer(Lv);
+  if (ASK_DOSE.test(q)) return doseAnswer();
+  if (ASK_SPACEWX.test(q) && !/take me|shelter|hide|cover/.test(q)) return spaceWxAnswer();
   if (has(q, /oxygen|\bo2\b|\bair\b|plss|life support|suit|breath|consumables/)) return o2();
   if (has(q, /turn back|go back|walk back|head (back|home)|return|abort/)) {
     if (!Lv.walk) return `Driving back from here takes about ${spokenDur(Lv.back)}. Say take me back to base to re-route.`;

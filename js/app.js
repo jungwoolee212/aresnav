@@ -12,6 +12,7 @@ import { renderTerrainView } from "./terrain3d.js";
 import { openHud, closeHud, hudIsOpen, updateHud } from "./hud.js";
 import { initVoice, voiceNavStart, voiceNavEnd, voiceTick, voiceToggleListen, voiceLang, voiceAsk } from "./voice.js";
 import { nameKo } from "./voice-ko.js";
+import { commsAlongRoute, walkDoseUSv, RAD_USV_PER_DAY, dustSeason, marsSpaceWeather, stormNow, BASE_ANT_M, SUIT_ANT_M } from "./conditions.js";
 import { curiosityLegs, compareWithCuriosity, GEO_TILES, routeGeology, toGPX, download, openRouteSheet } from "./extras.js";
 import { uiKo, navKo, applyStatic } from "./ui-ko.js";
 import { inExtent, normLon, sourcesFor, sourceLabel, corridorFor, covers, buildSite, hasData } from "./terrain-live.js";
@@ -728,7 +729,10 @@ function analyse(tr) {
   for (const p of pts) { emin = Math.min(emin, p.elev); emax = Math.max(emax, p.elev); smax = Math.max(smax, p.slope); }
   const skyAvg = samples.reduce((s, x) => s + x.sky, 0) / samples.length;
   const shadeFrac = samples.filter((s) => s.shade).length / samples.length;
-  return { step, back, samples, shelter, dangers: D, emin, emax, smax, skyAvg, shadeFrac, day: daylight(today), Ls: sunAt(12, today).Ls };
+  // radio line of sight from the base antenna at the route start to the crew, at every sample
+  const comms = commsAlongRoute(site, samples, pts[0]);
+  samples.forEach((s, k) => { s.los = comms.los[k]; });
+  return { step, back, samples, shelter, dangers: D, emin, emax, smax, skyAvg, shadeFrac, comms, day: daylight(today), Ls: sunAt(12, today).Ls };
 }
 
 function assess(tr, A) {
@@ -741,6 +745,12 @@ function assess(tr, A) {
     const lvl = need <= usable * 0.85 ? "ok" : need <= usable ? "warn" : "bad";
     C.push({ lvl, title: lvl === "bad" ? "Not enough oxygen to walk back" : lvl === "warn" ? "Oxygen is tight for the walk back" : "Enough oxygen to walk back",
       sub: `Out ${dur(tot.time)} + back ${dur(backEnd)} = ${dur(need)} of ${dur(usable)} usable (${o.plssHours} h suit − ${o.reserveHours} h reserve). ${minM < 0 ? `Walk-back margin runs out ${distTxt(at)} along.` : `Lowest walk-back margin ${dur(minM)}.`}` });
+  }
+  if (A.comms) {
+    const cm = A.comms, out = cm.runs.reduce((s, r) => s + r.len, 0);
+    C.push({ lvl: "ok", title: cm.runs.length ? `Out of radio line of sight to base for ${distTxt(out)} (${fmt((1 - cm.frac) * 100)}% of the route)` : "Radio line of sight to base the whole way",
+      sub: cm.runs.length ? `Longest gap ${distTxt(cm.longest.len)}, from ${distTxt(cm.longest.from)} along. Base antenna ${BASE_ANT_M} m, suit ${SUIT_ANT_M} m. Guidance keeps working offline there.`
+        : `Base antenna ${BASE_ANT_M} m, suit ${SUIT_ANT_M} m: the terrain never blocks the straight path.` });
   }
   const finish = t0 + tot.time + (walk ? backEnd : 0);
   if (A.day.rise != null) {
@@ -910,6 +920,48 @@ function oxygenCard(tr, A) {
       : `How it's planned: the suit is assumed to use oxygen at a steady rate and last ${fmt(o.plssHours, 1)} h (Settings → Suit oxygen), with ${fmt(o.reserveHours, 1)} h kept for emergencies. At every point on the route, <b>time already out + time to walk back to the start along the same path</b> must fit in the usable oxygen; what's left over is the <b>walk-back margin</b>. During guidance, O₂ left counts down with elapsed time and the margin is recomputed from where you are. Real use varies with effort, slope and the suit, so a real system would replace this with the suit's own oxygen readings.`}</p></div>`;
 }
 
+// Radio contact, radiation dose, dust season and space weather for the route report
+function conditionsCard(tr, A) {
+  const ko = KOUI(), cm = A.comms, walk = tr.kind === "walk";
+  const strip = A.samples.map((s) => `<i style="flex:1;background:${s.los === false ? "#9b6bff" : "#2fd68f"}"></i>`).join("");
+  const shadow = cm ? cm.runs.reduce((s, r) => s + r.len, 0) : 0;
+  const secs = tr.total.time + (walk ? A.back[A.back.length - 1] : 0), dose = walkDoseUSv(secs, A.skyAvg);
+  const dust = dustSeason(A.Ls);
+  return `<div class="card"><div class="eyebrow">${ko ? "기지와의 무선 가시선" : "Radio line of sight to base"}</div>
+    <div class="kv"><div>${ko ? "가시선 구간" : "In sight"}<b>${fmt((cm?.frac ?? 1) * 100)}%</b></div><div>${ko ? "음영 합계" : "In shadow"}<b>${distTxt(shadow)}</b></div><div>${ko ? "가장 긴 음영" : "Longest gap"}<b>${cm?.runs.length ? distTxt(cm.longest.len) : "—"}</b></div></div>
+    <div class="strip">${strip}</div><div class="legend-row" style="justify-content:space-between"><span>${ko ? "출발(기지)" : "start (base)"}</span><span>${ko ? "초록 = 가시선 · 보라 = 통신 음영" : "green = line of sight · purple = radio shadow"}</span><span>${ko ? "도착" : "end"}</span></div>
+    <p class="small">${ko
+      ? `출발점의 기지 안테나(높이 ${BASE_ANT_M} m)에서 우주복 안테나(${SUIT_ANT_M} m)까지 지형이 직선을 가리는지, 화성의 곡률까지 넣어 계산해요. 음영 구간에서는 기지와 교신이 끊길 수 있지만, 안내·안전 점검·음성 해석은 기기 안에서 계속돼요. 중계 위성은 계산하지 않아요.`
+      : `Whether the terrain blocks the straight path from the base antenna at the start (${BASE_ANT_M} m mast) to the suit antenna (${SUIT_ANT_M} m), including the planet's curvature. In radio shadow the link to base can drop, but guidance, the safety checks and the voice assistant keep running on the device. Relay orbiters aren't modelled.`}</p></div>
+    <div class="card"><div class="eyebrow">${ko ? "방사선량 · 먼지 · 우주 날씨" : "Radiation dose · dust · space weather"}</div>
+    <div class="kv"><div>${ko ? "이번 EVA 예상 선량" : "Est. dose this EVA"}<b>≈ ${fmt(dose)} µSv</b></div><div>${ko ? "개활지 하루" : "Open ground, per day"}<b>${RAD_USV_PER_DAY} µSv</b></div><div>${ko ? "먼지 폭풍 철" : "Dust-storm season"}<b>${dust ? (ko ? "예" : "yes") : (ko ? "아니요" : "no")}</b></div></div>
+    <p class="small">${ko
+      ? `선량: 큐리오시티 RAD가 게일 크레이터 지표에서 측정한 하루 약 ${RAD_USV_PER_DAY} µSv(Hassler 외 2014)에, 이동 시간${walk ? "(귀환 포함)" : ""}과 경로의 평균 하늘 개방률(${fmt(A.skyAvg * 100)}%)을 곱한 대략적인 값이에요. 태양 입자 폭풍 때는 몇 배로 늘 수 있어요.`
+      : `Dose: Curiosity's RAD measured about ${RAD_USV_PER_DAY} µSv a day on the surface in Gale crater (Hassler et al. 2014). This scales it by the time outside${walk ? " (including the walk back)" : ""} and the route's average open sky (${fmt(A.skyAvg * 100)}%): a rough estimate. A solar particle event can raise it many times.`}</p>
+    <p class="small">${ko
+      ? `먼지: 지금은 화성 계절 Ls ${fmt(A.Ls)}°예요. ${dust ? "Ls 180°–330°는 먼지 폭풍 철이라 지역 폭풍이 잦고, 기록된 전 지구 폭풍도 모두 이 시기에 시작했어요. 대피처와 오프라인 안내를 미리 확인하세요." : "먼지 폭풍 철(Ls 180°–330°)이 아니에요."} 공개된 화성 먼지 예보는 없어서, 실시간 날씨가 아니라 계절 통계예요.`
+      : `Dust: the Mars season is now Ls ${fmt(A.Ls)}°. ${dust ? "Ls 180°–330° is dust-storm season: regional storms are common, and every recorded global storm began in it. Check your shelter and offline routes first." : "This is outside dust-storm season (Ls 180°–330°)."} No public Mars dust forecast exists, so this is climatology, not live weather.`}</p>
+    <div id="swBox" class="small muted">${ko ? "NASA DONKI에서 화성 방향 태양 폭풍(CME) 예측을 확인하는 중…" : "Checking NASA DONKI for solar storms (CMEs) predicted to reach Mars…"}</div></div>`;
+}
+async function fillSpaceWeather() {
+  const sw = await marsSpaceWeather(), box = $("#swBox"), ko = KOUI();
+  if (!box) return;
+  const when = (ms) => new Date(ms).toISOString().slice(0, 16).replace("T", " ") + " UTC";
+  const ago = (ms) => { const h = Math.round((Date.now() - ms) / 3600e3); return h < 1 ? (ko ? "방금" : "just now") : ko ? `${h}시간 전` : `${h} h ago`; };
+  if (sw.error) {
+    box.textContent = sw.error === "offline"
+      ? (ko ? "우주 날씨: 아직 받은 자료가 없어요(오프라인). 연결되면 NASA DONKI에서 받아요." : "Space weather: nothing loaded yet (offline). It comes from NASA DONKI once connected.")
+      : (ko ? "우주 날씨: NASA DONKI가 지금 요청이 많아 응답하지 않아요. 15분 뒤 다시 시도해요." : "Space weather: NASA DONKI is busy right now (request limit). It will try again in 15 minutes.");
+    return;
+  }
+  const s = stormNow(sw), next = sw.impacts.find((i) => i.arrival > Date.now());
+  const src = ko ? `출처: NASA DONKI WSA-ENLIL 모델, ${ago(sw.fetched)} 갱신${sw.stale ? " (오프라인: 마지막 저장값)" : ""}.` : `Source: NASA DONKI WSA-ENLIL model runs, updated ${ago(sw.fetched)}${sw.stale ? " (offline: last saved)" : ""}.`;
+  box.classList.toggle("muted", !s);
+  box.innerHTML = s
+    ? `<b style="color:var(--warn)">${ko ? "⚠ 태양 폭풍(CME)이 화성에 도달 예측" : "⚠ Solar storm (CME) predicted at Mars"}: ${when(s.arrival)}${s.glancing ? (ko ? " (스치는 충돌)" : " (glancing blow)") : ""}.</b> ${ko ? "가장 가까운 대피처를 미리 확인하세요." : "Know your nearest shelter before you go."} ${src}`
+    : `${ko ? "앞으로 3일 안에 화성에 도달할 것으로 예측된 태양 폭풍(CME)은 없어요." : "No solar storm (CME) is predicted to reach Mars in the next 3 days."}${next ? (ko ? ` 다음 예측: ${when(next.arrival)}.` : ` Next predicted: ${when(next.arrival)}.`) : ""} ${src}`;
+}
+
 function renderPanes() {
   if (!S.track) {
     $("#stepsIntro").textContent = "Choose a start and a destination first."; $("#stepList").innerHTML = "";
@@ -956,7 +1008,9 @@ function renderPanes() {
       <p class="small">Turn on <b>THEMIS night-time IR</b> in Layers: bright ground stays warm at night (bedrock, cemented ridges, firm footing); dark ground is dust or sand (soft, can bog a rover). TES layers add regional mineral context.</p></div>
     <div class="card"><div class="eyebrow">Geologic context · USGS</div><div id="geoBox" class="small muted">Looking up the USGS geologic map…</div>
       <p class="small muted">USGS global geologic map of Mars (Tanaka et al. 2014, SIM 3292), queried through NASA Trek. At 1:20,000,000 a unit spans tens of kilometres: this is the regional setting, not ground truth for footing.</p></div>
+    ${conditionsCard(tr, A)}
     ${curiosityCard()}`;
+  fillSpaceWeather();
   $$("#reportBody .danger-item").forEach((el) => el.addEventListener("click", () => flyToIdx(+el.dataset.i)));
   bindCuriosityCard();
   const trk = S.track;
@@ -1069,6 +1123,7 @@ function renderAbout() {
   const d = S.baseSite.dem_scale;   // the 8-bit scale disclosure is about the prebuilt box
   $("#aboutBody").innerHTML = `
     <h3>The site</h3><p>${esc(ABOUT_SITE)} Routes can be planned anywhere on Mars. Dotted outlines mark the ${CATALOG.dems.length} regions where Trek has a sharp regional elevation model (green: HiRISE ~1 m, purple: CTX / HRSC); elsewhere only the global 200 m blend exists, which is good for reconnaissance but can't show cliffs or boulder fields. The orange dashed box is the ground analysed for the current route: ${fmt((S.site.nx * S.site.cell_m) / 1000, 1)} × ${fmt((S.site.ny * S.site.cell_m) / 1000, 1)} km on a ${fmt(S.site.cell_m)} m grid from ${S.site.live ? `${esc(sourceLabel(S.site.source))}${S.site.rock ? `, rock density from ${esc(S.site.rock.mosaic)}` : ", rock density not assessed (no HiRISE mosaic)"}` : "the prebuilt lower Mount Sharp data"}. Context: NASA's <a href="https://science.nasa.gov/resource/curiositys-proposed-path-up-mount-sharp/" target="_blank" rel="noopener">Curiosity's proposed path up Mount Sharp</a>.</p>
+    <h3>Radio contact, dose, dust and space weather</h3><p><b>Radio:</b> line of sight from a 5 m base antenna at the route start to a 2 m suit antenna, over the terrain grid and the planet's curvature; relay orbiters aren't modelled. <b>Dose:</b> Curiosity RAD's ~640 µSv/day on the surface at Gale (Hassler et al. 2014), scaled by time outside and the route's average open sky; a rough estimate. <b>Dust:</b> Ls 180°–330° is dust-storm season (climatology; no public Mars dust forecast exists). <b>Space weather:</b> CMEs that NASA DONKI's WSA-ENLIL model runs predict to reach Mars, refreshed at most every 3 hours and kept for offline use.</p>
     <h3>How oxygen is planned</h3><p>A planning estimate, not a sensor reading. The suit is assumed to use oxygen at a steady rate over its rated time (Settings → Suit oxygen, default 8 h), with 1 h kept in reserve. At every point the time already out plus the time to walk back to the start along the same path must fit in the usable oxygen; the leftover is the walk-back margin. The route report's <b>Oxygen plan</b> shows it along the whole route, and guidance warns when the margin runs low. Real use varies with effort, slope and the suit.</p>
     <h3>How a route is planned</h3><ul>
       <li>A* search over the grid finds the quickest path, with extra cost near steep or rocky ground (the <i>route preference</i> setting).</li>
@@ -1118,7 +1173,7 @@ function live(t) {
   const i = st.i, f = pts[i + 1] ? (st.dist - pts[i].dist) / Math.max(1e-6, pts[i + 1].dist - pts[i].dist) : 0;
   const back = A.back[i] + (A.back[Math.min(i + 1, pts.length - 1)] - A.back[i]) * Math.min(1, Math.max(0, f));
   let slopeAhead = 0; for (let k = i; k < pts.length && pts[k].dist <= st.dist + 50; k++) slopeAhead = Math.max(slopeAhead, pts[k].slope);
-  const out = { t, st, man, after, distTo, lmst, sun, shade, sky: smp.sky, slopeAhead, back, walk,
+  const out = { t, st, man, after, distTo, lmst, sun, shade, sky: smp.sky, los: smp.los !== false, slopeAhead, back, walk,
     arrive: startSec() + tr.total.time, remainDist: tr.total.dist - st.dist, remainTime: Math.max(0, tr.total.time - t), done: t >= tr.total.time };
   if (walk) { out.o2Left = o.plssHours * 3600 - t; out.margin = out.o2Left - o.reserveHours * 3600 - back; }
   else {
@@ -1143,6 +1198,7 @@ function live(t) {
 }
 
 function startNav(intro) {
+  marsSpaceWeather().catch(() => {});
   if (!S.track) return;
   if (typeof intro !== "string" && intro !== false) intro = undefined; // click events pass an Event
   closeDrawer(); setPick(null); map.closePopup();
@@ -1211,6 +1267,7 @@ function renderNav(Lv) {
     ? v(ko ? "산소 잔량" : "O₂ left", ko ? navKo.dur(Lv.o2Left) : dur(Lv.o2Left), Lv.o2Left < S.opts.reserveHours * 3600 ? "bad" : "") + v(ko ? "귀환 여유" : "Walk-back margin", ko ? navKo.dur(Lv.margin) : dur(Lv.margin), Lv.margin < 0 ? "bad" : Lv.margin < 1800 ? "warn" : "")
     : v(ko ? "속도" : "Speed", `${fmt(Lv.speed, 1)} km/h`) + v(ko ? "기울기" : "Tilt", `${fmt(Lv.st.p.slope)}° / ${S.opts.roverMaxSlope}°`, Lv.st.p.slope > S.opts.roverMaxSlope * 0.85 ? "warn" : ""))
     + v(ko ? "고도" : "Elevation", `${fmt(Lv.st.p.elev)} m`) + v(ko ? "하늘 개방" : "Sky open", `${fmt(Lv.sky * 100)}%`)
+    + v(ko ? "기지 통신" : "Base link", Lv.los ? (ko ? "가시선" : "in sight") : (ko ? "통신 음영" : "radio shadow"), Lv.los ? "" : "warn")
     + v(ko ? "태양" : "Sun", Lv.sun.el <= 0 ? (ko ? "지평선 아래" : "below horizon") : Lv.shade ? (ko ? "그늘" : "in shadow") : `${fmt(Lv.sun.el)}° ${ko ? navKo.dir(compassWord(Lv.sun.az)) : compassWord(Lv.sun.az)}`, Lv.shade ? "warn" : "");
   $("#navScrub").value = Math.round((Lv.t / tr.total.time) * 1000);
   // checkpoint card with a 3D look ahead

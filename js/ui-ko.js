@@ -21,6 +21,8 @@ const RULES = [
   [/^Analysing terrain around your route \((.+)\)… (\d+)%$/, "경로 주변 지형 분석 중($1)… $2%"],
   [/^No safe (walkable|drivable) path reaches (.+): it's cut off by ground steeper than (\d+)°(.*)\.$/, (_, w, to, d, r) => `${to.replace("the destination", "목적지").replace(/^stop (\d+)$/, "$1번째 지점")}까지 ${w === "walkable" ? "걸어서" : "로버로"} 갈 수 있는 안전한 경로가 없습니다. ${d}°보다 가파른 지형${r ? "이나 바위 지대" : ""}에 막혀 있습니다.`],
   [/^No safe ground near (.+)\.$/, (_, p) => `${p.replace("the start", "출발지").replace("the destination", "목적지")} 근처에 안전한 땅이 없습니다.`],
+  [/^Longest gap (.+?), from (.+?) along\. Base antenna (\d+) m, suit (\d+) m\. Guidance keeps working offline there\.$/, "가장 긴 음영 $1, $2 지점부터. 기지 안테나 $3 m, 우주복 $4 m. 그 구간에서도 안내는 오프라인으로 계속됩니다."],
+  [/^Base antenna (\d+) m, suit (\d+) m: the terrain never blocks the straight path\.$/, "기지 안테나 $1 m, 우주복 $2 m: 지형이 직선 경로를 가리는 곳이 없습니다."],
   [/^Couldn't load terrain from NASA Mars Trek(.*)$/, "NASA Mars Trek에서 지형을 불러오지 못했습니다$1"],
   [/^No connection, and the terrain for this area isn't saved.*$/, "연결이 없고, 이 지역 지형은 아직 이 기기에 저장되지 않았어요. 이미 불러온 경로와 장소는 오프라인에서도 됩니다. 여기서 경로를 짜려면 한 번 연결해 주세요."],
 ];

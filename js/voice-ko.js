@@ -85,6 +85,9 @@ function one(s) {
   const start = /(?:안내(?:\s*시작)?|출발하자|가자|데려|길\s*안내|바로\s*출발)/.test(s) && !/(?:경로|길|루트)\s*(?:만\s*)?(?:찾|계획|짜|알려|보여|만들)/.test(s);
 
   // ---- questions and commands that contain route-like words: settle these first ----
+  if (/통신|교신|무선|신호|가시선|기지(?:랑|와|하고)\s*연결/.test(s) && !/꺼|켜/.test(s)) return "am I in radio contact with base";
+  if (/선량|피폭|방사선\s*(?:량|얼마|수치|노출)/.test(s) && !/어떡|어떻게\s*해|높으면|피해|피할|대피|숨/.test(s)) return "what is the radiation dose";
+  if (/우주\s*날씨|CME|코로나\s*질량|(?:태양\s*(?:폭풍|풍)|먼지\s*폭풍)\s*(?:예보|예측|와|오나|올까|있어|있나|소식|철|시즌)|먼지\s*폭풍\s*철/.test(s) && !/대피|숨|피해|데려|가자|피할/.test(s)) return "space weather";
   if (/산소|o2|O2|오투/.test(s) && /어떻게\s*(?:계산|정해|구해|알아|나와|나오|돼)|계산|계획|기준|예상치|추정|원리|어디서\s*나와/.test(s)) return "how is oxygen calculated";
   if ((m = s.match(/^(?:지도|맵)\s*(?:에서|에|상에서)\s*(.+?)\s*(?:을|를|이|가)?\s*(?:찾아|보여|어디)/))) return `show me ${koPlace(m[1])}`;
   if (/해\s*지기\s*전|어두워지기\s*전|일몰\s*전|밤\s*(?:되기|오기|이\s*되기)\s*전|해\s*(?:가\s*)?(?:떠|떴)|해\s*(?:가\s*)?(?:언제|몇\s*시(?:에)?)\s*(?:떠|뜨)|^(?:지금\s*)?해\s*(?:가\s*)?(?:있|보여)/.test(s)) return "is the sun up";
@@ -277,6 +280,8 @@ export function checkKo(t) {
   if ((m = t.match(/^Radiation shielding: sky (\d+)% open on average$/))) return `방사선 차폐: 하늘 평균 ${m[1]}퍼센트 개방`;
   if ((m = t.match(/^Rough guide only: (\d+) m terrain can't show small cliffs or rocks$/))) return `대략적인 길만 안내: ${m[1]}미터 간격 지형이라 작은 절벽·바위가 안 보임`;
   if (t === "Rock density not assessed") return "바위 밀도 미평가";
+  if ((m = t.match(/^Out of radio line of sight to base for (.+) \((\d+)% of the route\)$/))) return `기지와 무선 가시선이 끊기는 구간 ${m[1]} (경로의 ${m[2]}퍼센트)`;
+  if (t === "Radio line of sight to base the whole way") return "전 구간 기지와 무선 가시선 확보";
   if (t === "Point moved to usable ground") return "지점을 이동 가능한 땅으로 옮김";
   return t;
 }
@@ -377,6 +382,19 @@ const RULES = [
   [/^There's no real shelter near here: the terrain blocks only (.+) of the sky where you are, and no reachable spot within 6 kilometres blocks much more$/, "근처에 쓸 만한 대피처가 없습니다. 지금 위치는 지형이 하늘의 $1만 가리고, 6킬로미터 안에 갈 수 있는 곳 중 훨씬 더 가려진 곳이 없습니다"],
   [/^(.+) is (.+) kilometres away: too far for a surface traverse \(this planner goes up to 1,500 km\)$/, "$1까지 $2킬로미터: 지표 이동으로는 너무 멉니다(최대 1,500킬로미터)"],
   [/^I moved the map there$/, "지도를 그곳으로 옮겼습니다"],
+  [/^You're in line of sight with base$/, "지금 기지와 가시선이 확보돼 있습니다"], [/^You're in radio shadow: no line of sight to base$/, "지금은 통신 음영 구간이라 기지와 가시선이 없습니다"],
+  [/^Line of sight to base on (\d+) percent of the route$/, "경로의 $1퍼센트에서 기지와 가시선이 확보됩니다"], [/^No radio shadow on this route$/, "이 경로에는 통신 음영 구간이 없습니다"],
+  [/^Longest radio shadow is (.+?), starting (.+?) along$/, "가장 긴 통신 음영은 $1이며, $2 지점에서 시작합니다"], [/^Guidance keeps working offline in radio shadow$/, "통신 음영에서도 안내는 오프라인으로 계속됩니다"],
+  [/^Entering radio shadow(?: for about (.+?))?$/, (_, d) => `${d ? `약 ${d} 동안 ` : ""}통신 음영 구간에 들어갑니다`], [/^Guidance continues offline$/, "안내는 오프라인으로 계속됩니다"], [/^Back in line of sight with base$/, "기지와 다시 가시선이 확보됐습니다"],
+  [/^Estimated radiation dose for this walk: about (\d+) microsieverts$/, "이번 이동의 예상 방사선량은 약 $1마이크로시버트입니다"],
+  [/^That's from Curiosity's measured (\d+) microsieverts a day on open ground, scaled by how much sky the terrain leaves open$/, "큐리오시티가 측정한 개활지 하루 $1마이크로시버트를, 지형이 열어 둔 하늘 비율로 줄인 값입니다"],
+  [/^A solar particle event can raise this many times$/, "태양 입자 폭풍 때는 몇 배로 늘 수 있습니다"],
+  [/^Space weather: a solar storm is predicted to reach Mars around (.+?) UTC(, a glancing blow)?$/, (_, t, g) => `우주 날씨: 태양 폭풍이 협정 세계시 ${t}쯤 화성에 도달할 것으로 예측됩니다${g ? "(스치는 충돌)" : ""}`],
+  [/^Know your nearest shelter$/, "가장 가까운 대피처를 확인해 두세요"], [/^No solar storm is predicted to reach Mars in the next 3 days$/, "앞으로 3일 안에 화성에 도달할 것으로 예측된 태양 폭풍은 없습니다"],
+  [/^Space weather data isn't loaded yet$/, "우주 날씨 자료를 아직 받지 않았습니다"], [/^Open the route report while connected to fetch it from NASA DONKI$/, "연결된 상태에서 경로 보고서를 열면 NASA DONKI에서 받아옵니다"],
+  [/^It's dust storm season on Mars \(Ls (\d+) degrees\)$/, "지금은 화성의 먼지 폭풍 철입니다(Ls $1도)"], [/^Regional dust storms are common now$/, "지역 먼지 폭풍이 잦은 시기입니다"],
+  [/^It's not dust storm season on Mars \(Ls (\d+) degrees\)$/, "지금은 화성의 먼지 폭풍 철이 아닙니다(Ls $1도)"],
+  [/^There's no route yet$/, "아직 경로가 없습니다"],
   [/^No safe (walkable|drivable) path reaches (.+?): it's cut off by ground steeper than (\d+)(?:°| degrees)( or too rocky for the rover)?$/, (_, w, to, d, r) => `${to}까지 ${w === "drivable" ? "로버로" : "걸어서"} 갈 안전한 길이 없습니다. ${d}도보다 가파른${r ? "거나 로버에게 바위가 너무 많은" : ""} 지형에 막혀 있습니다`],
   [/^Oxygen here is a planning estimate, not a sensor reading$/, "여기 산소는 센서 값이 아니라 계획용 예상치입니다"],
   [/^The suit is assumed to last (.+?) hours at a steady rate, with (.+?) hours? kept in reserve$/, "우주복 산소는 일정하게 줄어 $1시간 간다고 가정하고, 그중 $2시간은 비상용으로 남깁니다"],
