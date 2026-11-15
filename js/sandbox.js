@@ -16,7 +16,7 @@ export function sandboxExport(site, { track, profile, opts, mode }) {
   return {
     format: "aresnav-terrain-sandbox/1",
     about: "Real Mars terrain from NASA Mars Trek, analysed by AresNav, for rover path-planning / reinforcement-learning research. Grids are row-major, row 0 = north edge, column 0 = west edge; cell (r, c) centre = (north - (r + 0.5) * dLat, west + (c + 0.5) * dLon). Planning-level resolution: not for camera-based hazard detection or wheel-soil physics.",
-    license: "Code: MIT. Terrain derived from NASA Mars Trek data (NASA/JPL-Caltech; HiRISE NASA/JPL/University of Arizona; CTX NASA/JPL/MSSS; MOLA+HRSC NASA/JPL/GSFC, ESA/DLR/FU Berlin). Credit the sources.",
+    license: "Code: MIT. Terrain derived from NASA Mars Trek data: HiRISE (NASA/JPL/University of Arizona, public domain), CTX (NASA/JPL/MSSS), MOLA (NASA/JPL/GSFC). Where the grid comes from the MOLA + HRSC blend or an HRSC model, it contains Mars Express HRSC data: ESA/DLR/FU Berlin, CC BY-SA 3.0 IGO (attribution and share-alike apply to derived data). Credit the sources.",
     source: site.source ? { title: site.source.title, metres_per_pixel: site.source.pxM } : { title: "MRO HiRISE Gale crater DEM (prebuilt)" },
     grid: { bbox: site.bbox, nx: site.nx, ny: site.ny, cell_m: site.cell_m, dLat: site.dLat, dLon: site.dLon },
     layers: {

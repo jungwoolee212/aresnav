@@ -143,9 +143,9 @@ Every outside source the app uses, where it's used, and its licence or credit li
 | Source | Used for | Terms |
 |---|---|---|
 | [NASA Mars Trek](https://trek.nasa.gov/mars/) (NASA/JPL-Caltech): map tiles, elevation services, layer catalogue, bookmarks, waypoints and traverses | Base map and layers, terrain analysis anywhere on Mars (`js/terrain-live.js`), prebuilt site (`tools/build_site_data.py` → `data/`), regional model catalogue (`tools/build_catalog.py` → `js/catalog.js`), named places (`tools/build_places.py` → `js/places.js`) | NASA data, used under [NASA's media usage guidelines](https://www.nasa.gov/nasa-brand-center/images-and-media/) |
-| MRO HiRISE images and DEMs, via Trek (NASA/JPL/University of Arizona) | Prebuilt Gale site, EVA-grade slopes, rock-texture estimate | Credit: NASA/JPL/University of Arizona |
+| MRO HiRISE images and DEMs, via Trek (NASA/JPL/University of Arizona) | Prebuilt Gale site, EVA-grade slopes, rock-texture estimate | Public domain; credit requested: NASA/JPL/University of Arizona |
 | MRO CTX mosaics and DEMs, via Trek (NASA/JPL/MSSS) | Regional terrain models, map layer | Credit: NASA/JPL/MSSS |
-| MGS MOLA + Mars Express HRSC blended global DEM, via Trek (NASA/JPL/GSFC, ESA/DLR/FU Berlin) | Terrain everywhere outside regional models (~200 m, rough guide only) | Credit: NASA/JPL/GSFC, ESA/DLR/FU Berlin |
+| MGS MOLA + Mars Express HRSC blended global DEM, via Trek (NASA/JPL/GSFC, ESA/DLR/FU Berlin) | Terrain everywhere outside regional models (~200 m, rough guide only) | Credit: NASA/JPL/GSFC; HRSC: ESA/DLR/FU Berlin, CC BY-SA 3.0 IGO (attribution, share-alike for derived data) |
 | Viking, THEMIS day/night IR, TES thermal inertia, clay/glass and plagioclase layers, via Trek | Optional map layers | Credit as listed in Trek's layer metadata |
 | [USGS global geologic map of Mars](https://pubs.usgs.gov/publication/sim3292) (Tanaka et al. 2014, SIM 3292), via Trek's map service | Geologic map layer; geologic units named in the route report | USGS public domain; credit: USGS |
 | Curiosity traverse line and waypoints, via Trek | Checking planned routes against Curiosity's real path (`js/extras.js`) | NASA data |
