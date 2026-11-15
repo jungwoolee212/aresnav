@@ -41,7 +41,7 @@ Anywhere on Mars (88°S–88°N). Once start and destination are set, the app pi
 
 **Places NASA Trek marks** (`js/places.js`, built by `tools/build_places.py`) are on the map and can be searched, spoken and used as start or destination: Trek's 12 mission bookmarks, 95 mission waypoints (e.g. Bradbury Landing, Vera Rubin Ridge, The Hab), 5 rover / story traverses, and all 1,783 IAU-named features. Click a point → *Start here* / *Make this the destination*, or search under Layers → Go to a site.
 
-Rock density comes from HiRISE image texture where a HiRISE mosaic covers the ground; elsewhere it's marked "not assessed". Where the browser-built grid overlaps the prebuilt one, they agree closely (elevation MAE 1.5 m, slope MAE 2.6°, no-go agreement 96%).
+Rock density comes from HiRISE image texture where a HiRISE mosaic covers the ground; elsewhere it's marked "not assessed". Where the browser-built grid overlaps the prebuilt one, they agree closely. Built from the same Trek DEM tiles as the prebuilt grid (Gale_DEM_SMG_1m, 8-bit): elevation MAE 3.8 m, slope MAE 0.9°, no-go agreement 98.5%. Built from Trek's full-precision (float) version of the same DEM, which the app uses outside the prebuilt area: slope MAE 3.5°, no-go agreement 93%, with elevations offset by a near-constant ~21 m between the two versions (re-measured 15 Nov 2026).
 
 **Refine.** The terrain line under the route summary shows the grid used. *Refine route terrain* (or Settings → Terrain detail → High) re-analyses the corridor between start and destination on a finer grid (down to 4 m), so long routes get coarser cells only where needed. `tools/build_catalog.py` rebuilds the catalog from Trek.
 
