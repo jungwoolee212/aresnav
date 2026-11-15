@@ -12,6 +12,7 @@ import { renderTerrainView } from "./terrain3d.js";
 import { openHud, closeHud, hudIsOpen, updateHud } from "./hud.js";
 import { initVoice, voiceNavStart, voiceNavEnd, voiceTick, voiceToggleListen, voiceLang, voiceAsk } from "./voice.js";
 import { nameKo } from "./voice-ko.js";
+import { SCIENCE_SITES, OBJECTIVES } from "./science.js";
 import { commsAlongRoute, walkDoseUSv, RAD_USV_PER_DAY, dustSeason, marsSpaceWeather, stormNow, BASE_ANT_M, SUIT_ANT_M, effortModel, CREW_SUIT_KG, BUDDY_PACE, RESCUE_PACE } from "./conditions.js";
 import { curiosityLegs, compareWithCuriosity, GEO_TILES, routeGeology, toGPX, download, openRouteSheet } from "./extras.js";
 import { uiKo, navKo, applyStatic } from "./ui-ko.js";
@@ -944,6 +945,37 @@ function oxygenCard(tr, A) {
       : `How it's planned: the suit is rated for ${fmt(o.plssHours, 1)} h <b>walking on the flat at the planned pace</b> (Settings → Suit oxygen), with ${fmt(o.reserveHours, 1)} h kept for emergencies. Climbs, a faster pace, a heavier load and rocky ground use it faster, and standing still uses less (effort relative to the flat from the Pandolf 1977 load-carriage equation, crew + suit ${CREW_SUIT_KG} kg plus the load). At every point, <b>oxygen already used + oxygen to walk back to the start along the same path</b> must fit in the usable oxygen; what's left over is the <b>walk-back margin</b>. All times in the table are oxygen in "hours of flat walking". It's a planning estimate, not a sensor reading: a real system would use the suit's own oxygen readings.`}</p></div>`;
 }
 
+// Science along the way: catalogued Curiosity science sites near the route, added as timed stops in one tap
+let sciFilter = "all";
+export function scienceNear(tr, maxKm = 3) {
+  const pts = tr.pts, step = Math.max(1, Math.floor(pts.length / 300));
+  const onRoute = new Set([S.start?.name, ...S.cps.map((c) => c.name), S.end?.name]);
+  return SCIENCE_SITES.filter((s) => s.lat != null).map((s) => {
+    let d = Infinity; for (let i = 0; i < pts.length; i += step) d = Math.min(d, distM([pts[i].lat, pts[i].lon], [s.lat, s.lon]));
+    return { ...s, off: d, on: onRoute.has(s.name) };
+  }).filter((s) => s.on || s.off <= maxKm * 1000).sort((a, b) => a.off - b.off);
+}
+function scienceCard(tr) {
+  const ko = KOUI(), near = scienceNear(tr);
+  if (!near.length) return "";
+  const list = near.filter((s) => sciFilter === "all" || s.obj === sciFilter);
+  const chips = ["all", ...new Set(near.map((s) => s.obj))].map((k) => `<button class="sci-chip${k === sciFilter ? " on" : ""}" data-sci-filter="${k}">${k === "all" ? (ko ? "전체" : "All") : esc(OBJECTIVES[k][ko ? "ko" : "en"])}</button>`).join("");
+  return `<div class="card"><div class="eyebrow">${ko ? "가는 길의 과학 · 큐리오시티 조사 지점" : "Science along the way · Curiosity science sites"}</div>
+    <div class="sci-chips">${chips}</div>
+    ${list.map((s) => `<div class="sci-site"><div><b>${esc(ko ? nameKo(s.name) : s.name)}</b> <span class="sci-tag">${esc(OBJECTIVES[s.obj][ko ? "ko" : "en"])}</span></div>
+      <div class="small">${esc(ko ? s.ko : s.en)}</div>
+      <div class="sci-row"><span class="muted small">${s.on ? (ko ? "이 경로에 포함됨" : "on this route") : ko ? `경로에서 ${distTxt(s.off)}` : `${distTxt(s.off)} off the route`}</span>
+      ${s.on ? "" : `<button class="btn small" data-sci-add="${esc(s.name)}">${ko ? `${s.min}분 조사 정차로 추가` : `Add as a ${s.min}-min science stop`}</button>`}</div></div>`).join("")}
+    <p class="small muted">${ko ? "추가하면 조사 시간까지 넣어 경로를 다시 짜고, 산소·일조·귀환 점검이 그 시간을 반영해요. 위치는 NASA Trek의 큐리오시티 경유지예요." : "Adding a stop re-plans the route with the time on site, so the oxygen, daylight and walk-back checks include it. Locations are NASA Trek's Curiosity waypoints."}</p></div>`;
+}
+function bindScience() {
+  $$("#reportBody [data-sci-filter]").forEach((b) => b.addEventListener("click", () => { sciFilter = b.dataset.sciFilter; renderPanes(); }));
+  $$("#reportBody [data-sci-add]").forEach((b) => b.addEventListener("click", () => {
+    const s = SCIENCE_SITES.find((x) => x.name === b.dataset.sciAdd); if (!s || !S.start || !S.end) return;
+    const p = makePoint(s.lat, s.lon, s.name); if (!p) { toast(KOUI() ? "그 지점 근처에 갈 수 있는 땅이 없어요." : "No usable ground near that site."); return; }
+    insertCheckpoint(p); p.dwell = s.min; changed();
+  }));
+}
 // Radio contact, radiation dose, dust season and space weather for the route report
 function conditionsCard(tr, A) {
   const ko = KOUI(), cm = A.comms, walk = tr.kind === "walk";
@@ -1032,9 +1064,11 @@ function renderPanes() {
       <p class="small">Turn on <b>THEMIS night-time IR</b> in Layers: bright ground stays warm at night (bedrock, cemented ridges, firm footing); dark ground is dust or sand (soft, can bog a rover). TES layers add regional mineral context.</p></div>
     <div class="card"><div class="eyebrow">Geologic context · USGS</div><div id="geoBox" class="small muted">Looking up the USGS geologic map…</div>
       <p class="small muted">USGS global geologic map of Mars (Tanaka et al. 2014, SIM 3292), queried through NASA Trek. At 1:20,000,000 a unit spans tens of kilometres: this is the regional setting, not ground truth for footing.</p></div>
+    ${scienceCard(tr)}
     ${conditionsCard(tr, A)}
     ${curiosityCard()}`;
   fillSpaceWeather();
+  bindScience();
   $$("#reportBody .danger-item").forEach((el) => el.addEventListener("click", () => flyToIdx(+el.dataset.i)));
   bindCuriosityCard();
   const trk = S.track;

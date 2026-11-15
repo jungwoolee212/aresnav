@@ -86,6 +86,7 @@ function one(s) {
 
   // ---- questions and commands that contain route-like words: settle these first ----
   if (/통신|교신|무선|신호|가시선|기지(?:랑|와|하고)\s*연결/.test(s) && !/꺼|켜/.test(s)) return "am I in radio contact with base";
+  if (/과학|조사할\s*(?:곳|데|만한|지점)|연구할|탐사\s*(?:목표|지점|할\s*곳)|시료|샘플/.test(s) && !/추가|넣어|데려|가자|가줘/.test(s)) return "science stops near the route";
   if (/(?:동료|파트너|짝|대원|같이\s*간\s*사람).*(?:다치|부상|쓰러|못\s*걸)|(?:다치|부상).*(?:동료|파트너|짝)|로버\s*(?:가|이)?\s*(?:구조|구하러|데리러)|구조\s*(?:오|와|올)/.test(s)) return "what if my partner is hurt";
   if (/선량|피폭|방사선\s*(?:량|얼마|수치|노출)/.test(s) && !/어떡|어떻게\s*해|높으면|피해|피할|대피|숨/.test(s)) return "what is the radiation dose";
   if (/우주\s*날씨|CME|코로나\s*질량|(?:태양\s*(?:폭풍|풍)|먼지\s*폭풍)\s*(?:예보|예측|와|오나|올까|있어|있나|소식|철|시즌)|먼지\s*폭풍\s*철/.test(s) && !/대피|숨|피해|데려|가자|피할/.test(s)) return "space weather";
@@ -307,6 +308,7 @@ const NAME_KO = [
   [/(\S+) (km|m) (north east|north west|south east|south west|north|south|east|west) of (.+?)(?=[,:]| to | from |$)/g, (_, n, u, d, b) => `${b}에서 ${DIR_KO[d]}쪽 ${n}${u}`],
   [/\bLanding plain\b/g, "착륙 평원"], [/\bUpper boxwork ridges\b/g, "상부 박스워크 능선"],
   [/\bPahrump Hills\b/g, "파럼프 힐스"], [/\bMurray Buttes\b/g, "머레이 뷰트"], [/\bBradbury Landing\b/g, "브래드버리 랜딩"], [/\bVera Rubin Ridge\b/g, "베라 루빈 능선"],
+  [/\bMarias Pass\b/g, "마리아스 패스"], [/\bBagnold Dunes\b/g, "배그놀드 사구"], [/\bThe Kimberly\b/g, "킴벌리"], [/\bGlenelg\b/g, "글레넬그"], [/\bThe Rocknest\b/g, "록네스트"],
   [/\bColumbia Memorial Station\b/g, "컬럼비아 기념 기지"], [/\bHome Plate\b/g, "홈 플레이트"], [/\bMatijevic Hill\b/g, "마티예비치 힐"], [/\bMarathon Valley\b/g, "마라톤 밸리"],
   [/\bGale crater \(Curiosity\)/g, "게일 크레이터(큐리오시티)"], [/\bJezero crater \(Perseverance\)/g, "예제로 크레이터(퍼서비어런스)"],
   [/\bColumbia Hills \(Spirit\)/g, "컬럼비아 힐스(스피릿)"], [/\bEndeavour crater \(Opportunity\)/g, "인데버 크레이터(오퍼튜니티)"],
@@ -330,6 +332,7 @@ const UNITS = [
 ];
 const subAll = (s, list) => list.reduce((t, [re, to]) => t.replace(re, to), s);
 // place names on screen (route card, markers) in Korean
+export const koName = (s) => (s ? subAll(String(s), NAME_KO) : s);
 export const nameKo = (s) => (s ? subAll(String(s), NAME_KO) : s);
 // a maneuver clause such as "bear right, toward X" or "steep climb · 18°, for 95 m · short steps, lean forward"
 function mClause(s) {

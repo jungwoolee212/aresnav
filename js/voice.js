@@ -14,7 +14,8 @@ import { compassWord } from "./nav.js";
 import { PLACES, SITES } from "./mission.js";
 import { PLACES_DATA } from "./places.js";
 import { inExtent } from "./terrain-live.js";
-import { hasHangul, koToEnglish, koPlace, enToKo, romanize } from "./voice-ko.js";
+import { hasHangul, koToEnglish, koPlace, enToKo, romanize, koName } from "./voice-ko.js";
+import { SCIENCE_SITES, OBJECTIVES } from "./science.js";
 import { walkDoseUSv, RAD_USV_PER_DAY, dustSeason, cachedSpaceWeather, stormNow, BUDDY_PACE } from "./conditions.js";
 
 const $ = (s) => document.querySelector(s);
@@ -654,6 +655,7 @@ async function savePlace(what, name) {
 const ASK_COMMS = /\b(radio|comms?|communication|contact with (the )?base|signal|line of sight|reach (the )?base)\b/;
 const ASK_DOSE = /\b(dose|dosage|how much radiation|radiation (level|exposure|dose))\b/;
 const ASK_BUDDY = /\b(partner|buddy|crewmate|hurt|injur|rescue|help (him|her|them) back)\b/;
+const ASK_SCIENCE = /\b(science|scientific|sample|samples|what to study|research|outcrop|geolog)/;
 const ASK_SPACEWX = /\b(space weather|solar storm|cme|solar flare|coronal|dust storm|dust season)\b/;
 function stormSentence(s) { return `Space weather: a solar storm is predicted to reach Mars around ${new Date(s.arrival).toISOString().slice(5, 16).replace("T", " ")} UTC${s.glancing ? ", a glancing blow" : ""}. Know your nearest shelter.`; }
 function commsAnswer(Lv) {
@@ -673,6 +675,18 @@ function buddyAnswer() {
   const pace = Math.round(BUDDY_PACE * 100);
   return `If one of you is hurt, the pair walks back at ${pace} percent pace. ${A.buddyMin < 0 ? `Oxygen would run short ${spokenDist(A.buddyAt)} along: plan a shorter walk or a rover escort.` : `The lowest margin is then ${spokenDur(A.buddyMin)}.`} A rover from base reaches the farthest point in about ${spokenDur(A.rescueS)}.`;
 }
+function scienceAnswer() {
+  const tr = C.S.track; if (!tr) return KO() ? "아직 경로가 없습니다." : "There's no route yet.";
+  const S = C.S, pts = tr.pts, on = new Set([S.start?.name, ...S.cps.map((c) => c.name), S.end?.name]);
+  const near = SCIENCE_SITES.filter((s) => s.lat != null).map((s) => {
+    let d = Infinity; for (let i = 0; i < pts.length; i += 5) d = Math.min(d, distM([pts[i].lat, pts[i].lon], [s.lat, s.lon]));
+    return { ...s, d, on: on.has(s.name) || d < 30 };
+  }).filter((s) => s.d <= 3000).sort((a, b) => (b.on - a.on) || a.d - b.d).slice(0, 4);
+  const add = near.find((s) => !s.on);
+  if (!near.length) return KO() ? "이 경로 근처에는 정리된 큐리오시티 과학 조사 지점이 없습니다." : "There are no catalogued Curiosity science sites near this route.";
+  if (KO()) return `이 경로 근처 과학 조사 지점: ${near.map((s) => `${koName(s.name)}(${OBJECTIVES[s.obj].ko}, ${s.on ? "경로에 포함" : `경로에서 ${Math.round(s.d)}미터`})`).join(", ")}.${add ? ` 경로 보고서에서 조사 정차로 추가하거나, '${koName(add.name)}에 체크포인트 추가해'라고 말하세요.` : ""}`;
+  return `Science sites near this route: ${near.map((s) => `${s.name} (${OBJECTIVES[s.obj].en.toLowerCase()}, ${s.on ? "on this route" : `${spokenDist(s.d)} off the route`})`).join("; ")}.${add ? ` Add one as a science stop from the route report, or say add a checkpoint at ${add.name}.` : ""}`;
+}
 function spaceWxAnswer() {
   const A = C.S.ana, sw = cachedSpaceWeather(), s = stormNow(sw), parts = [];
   if (!sw) parts.push("Space weather data isn't loaded yet. Open the route report while connected to fetch it from NASA DONKI.");
@@ -689,6 +703,7 @@ function o2How() {
 function planAnswer(q) {
   if (O2_HOW.test(q)) return o2How();
   if (ASK_BUDDY.test(q)) return buddyAnswer();
+  if (ASK_SCIENCE.test(q) && !/^(add|take me|route|go)\b/.test(q)) return scienceAnswer();
   if (ASK_COMMS.test(q)) return commsAnswer(null);
   if (ASK_DOSE.test(q)) return doseAnswer();
   if (ASK_SPACEWX.test(q) && !/take me|shelter|hide|cover/.test(q)) return spaceWxAnswer();
@@ -722,6 +737,7 @@ function answer(q, Lv) {
 
   if (O2_HOW.test(q)) return o2How();
   if (ASK_BUDDY.test(q)) return buddyAnswer();
+  if (ASK_SCIENCE.test(q) && !/^(add|take me|route|go)\b/.test(q)) return scienceAnswer();
   if (ASK_COMMS.test(q)) return commsAnswer(Lv);
   if (ASK_DOSE.test(q)) return doseAnswer();
   if (ASK_SPACEWX.test(q) && !/take me|shelter|hide|cover/.test(q)) return spaceWxAnswer();

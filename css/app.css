@@ -410,3 +410,12 @@ body.navigating .fit-ctl { display: none; }
 .o2-table td:first-child { white-space: normal; }
 .o2-table tr.tight td { background: rgba(245,200,75,.08); }
 .o2-table td.warn { color: #f5c84b; } .o2-table td.bad { color: #ff7083; }
+
+/* science stops in the route report */
+.sci-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 8px; }
+.sci-chip { font: inherit; font-size: 12px; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line, rgba(255,255,255,.15)); background: transparent; color: var(--muted, #a7adb8); cursor: pointer; }
+.sci-chip.on { background: rgba(47,214,143,.15); color: #2fd68f; border-color: rgba(47,214,143,.5); }
+.sci-site { padding: 8px 0; border-top: 1px solid rgba(255,255,255,.06); }
+.sci-site:first-of-type { border-top: 0; }
+.sci-tag { font-size: 11px; padding: 1px 7px; border-radius: 999px; background: rgba(232,116,59,.15); color: #e8743b; white-space: nowrap; }
+.sci-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 4px; flex-wrap: wrap; }
