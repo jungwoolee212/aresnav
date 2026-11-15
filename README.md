@@ -120,6 +120,17 @@ On average the planned route stays within 50 m of Curiosity's path for 66% of it
 
 **Elevation scale.** Trek serves the DEM as 8-bit tiles. Heights use `metres = 17.97 × DN − 4569.2`, fitted once against Curiosity's published elevations (RMS 4.6 m). This is disclosed in the app's Data panel. Slopes, shadows and shielding don't depend on it.
 
+## Run locally
+
+No install or build step. Serve the folder over HTTP (ES modules and the service worker don't run from `file://`) and open it in Chrome, Edge or Safari:
+
+```bash
+python3 -m http.server 8000
+# then open http://localhost:8000/
+```
+
+No keys or environment variables are needed. Live space weather uses NASA's public `DEMO_KEY`; the optional Claude fallback only runs if a user pastes their own key in Settings.
+
 ## Rebuild the terrain data
 
 ```bash
@@ -154,7 +165,7 @@ Every outside source the app uses, where it's used, and its licence or credit li
 | Viking, THEMIS day/night IR, TES thermal inertia, clay/glass and plagioclase layers, via Trek | Optional map layers | Credit as listed in Trek's layer metadata |
 | [USGS global geologic map of Mars](https://pubs.usgs.gov/publication/sim3292) (Tanaka et al. 2014, SIM 3292), via Trek's map service | Geologic map layer; geologic units named in the route report | USGS public domain; credit: USGS |
 | Curiosity traverse line and waypoints, via Trek | Checking planned routes against Curiosity's real path (`js/extras.js`); science stops (`js/science.js`); sandbox expert path (`js/sandbox.js`) | NASA data |
-| [NASA DONKI](https://kauai.ccmc.gsfc.nasa.gov/DONKI/) WSA-ENLIL simulations, via [api.nasa.gov](https://api.nasa.gov/) | Solar storms predicted to reach Mars (`js/conditions.js`) | NASA open API (public `DEMO_KEY`) |
+| [NASA DONKI](https://ccmc.gsfc.nasa.gov/tools/DONKI/) WSA-ENLIL simulations, via [api.nasa.gov](https://api.nasa.gov/) | Solar storms predicted to reach Mars (`js/conditions.js`) | NASA open API (public `DEMO_KEY`) |
 | IAU planetary feature names (IAU WGPSN), via Trek's search index | Searchable and spoken place names | Public nomenclature |
 | [Curiosity's proposed path up Mount Sharp](https://science.nasa.gov/resource/curiositys-proposed-path-up-mount-sharp/) (NASA/JPL-Caltech/Univ. of Arizona) | Site context in the Data panel | NASA image, credited |
 
