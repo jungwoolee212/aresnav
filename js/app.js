@@ -13,6 +13,7 @@ import { openHud, closeHud, hudIsOpen, updateHud } from "./hud.js";
 import { initVoice, voiceNavStart, voiceNavEnd, voiceTick, voiceToggleListen, voiceLang, voiceAsk } from "./voice.js";
 import { nameKo } from "./voice-ko.js";
 import { SCIENCE_SITES, OBJECTIVES } from "./science.js";
+import { sandboxExport } from "./sandbox.js";
 import { commsAlongRoute, walkDoseUSv, RAD_USV_PER_DAY, dustSeason, marsSpaceWeather, stormNow, BASE_ANT_M, SUIT_ANT_M, effortModel, CREW_SUIT_KG, BUDDY_PACE, RESCUE_PACE } from "./conditions.js";
 import { curiosityLegs, compareWithCuriosity, GEO_TILES, routeGeology, toGPX, download, openRouteSheet } from "./extras.js";
 import { uiKo, navKo, applyStatic } from "./ui-ko.js";
@@ -1066,9 +1067,18 @@ function renderPanes() {
       <p class="small muted">USGS global geologic map of Mars (Tanaka et al. 2014, SIM 3292), queried through NASA Trek. At 1:20,000,000 a unit spans tens of kilometres: this is the regional setting, not ground truth for footing.</p></div>
     ${scienceCard(tr)}
     ${conditionsCard(tr, A)}
-    ${curiosityCard()}`;
+    ${curiosityCard()}
+    <div class="card"><div class="eyebrow">${KOUI() ? "로버 자율주행 연구용 지형 내보내기" : "Rover-autonomy sandbox"}</div>
+      <p class="small">${KOUI()
+        ? "분석한 실제 화성 지형(고도·경사·바위 밀도·진입 금지 격자), 로버 한계, AresNav가 짠 경로(기준선), 이 지역을 지나간 큐리오시티의 실제 주행 경로(전문가 시연)를 JSON 하나로 내보내요. 경로 계획·강화학습 에이전트를 실제 화성 지형에서 학습·비교하는 데 쓸 수 있어요. 격자가 수 m 단위라 카메라 기반 장애물 회피나 바퀴 물리 시뮬레이션용은 아니에요."
+        : "Exports the analysed real Mars terrain (elevation, slope, rock density and no-go grids), the rover limits, the route AresNav planned (a baseline) and, where it crosses this ground, the path Curiosity's drivers actually took (an expert demonstration) as one JSON file. Use it to train or benchmark path-planning and reinforcement-learning agents on real Martian ground. Cells are metres across, so it is for route choice, not camera-based hazard avoidance or wheel physics."}</p>
+      <button class="btn small" id="btnSandbox">${KOUI() ? "JSON 내보내기" : "Export JSON"}</button></div>`;
   fillSpaceWeather();
   bindScience();
+  $("#btnSandbox")?.addEventListener("click", () => {
+    const data = sandboxExport(S.site, { track: S.track, opts: S.opts, mode: S.mode });
+    download(`aresnav-sandbox-${(S.site.source?.id || "gale").toString().slice(0, 40).replace(/[^a-z0-9_-]+/gi, "-")}.json`, JSON.stringify(data), "application/json");
+  });
   $$("#reportBody .danger-item").forEach((el) => el.addEventListener("click", () => flyToIdx(+el.dataset.i)));
   bindCuriosityCard();
   const trk = S.track;

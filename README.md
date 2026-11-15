@@ -72,9 +72,14 @@ Speech output uses the browser's speech synthesis. Voice input uses the Web Spee
 | Route | A* over an 8 m grid. It minimises travel time plus a penalty near steep or rocky ground and never crosses no-go cells. |
 | Slope & elevation | HiRISE Gale DEM (Mars Trek), slope over a ~70 m baseline |
 | Rocks & ridges | Texture energy of the HiRISE mosaic |
-| Oxygen / walk-back | Time out + time to walk back vs. suit duration minus reserve, at every point |
+| Oxygen / walk-back | Oxygen used so far + oxygen to walk back vs. suit duration minus reserve, at every point. Use scales with effort (Pandolf et al. 1977 load-carriage equation: grade, pace, carried load, rocky ground) relative to walking on the flat. A planning estimate, shown along the route in the report's Oxygen plan. |
+| Two-person EVA | If one crew member is hurt, the pair walks back at 60% pace: the oxygen must still cover that from every point. Also the time a pressurized rover from base needs to reach the farthest point. |
 | Daylight & shadow | Sun position (Mars24 algorithm) vs. the terrain horizon at the time you pass each point |
 | Radiation shielding (relative) | Share of the sky not blocked by terrain (sky-view factor from the DEM), plus the most sheltered spot near the route. A relative measure, not a dose: no dose data is used. |
+| Radiation dose (estimate) | Curiosity RAD's ~640 µSv/day at Gale (Hassler et al. 2014) × time outside × the route's average open sky. Rough, first-order. |
+| Radio line of sight | From a 5 m base antenna at the start to a 2 m suit antenna, over the terrain and the planet's curvature. Radio-shadow stretches are shown and announced; guidance keeps working offline there. |
+| Space weather & dust | Solar storms (CMEs) predicted to reach Mars from NASA DONKI's WSA-ENLIL runs (cached, kept offline). Dust-storm season from the Mars season, Ls 180°–330° (climatology: no public Mars dust forecast exists). |
+| Science along the way | Curiosity science sites within 3 km of the route (Trek waypoints), tagged by objective, added as timed science stops in one tap. |
 | Geologic context | Units crossed by the route, from the USGS global geologic map (SIM 3292) via Trek. Regional setting only, not used for routing. |
 
 ## Checked against Curiosity's real path
@@ -159,6 +164,18 @@ Every outside source the app uses, where it's used, and its licence or credit li
 | Python [NumPy](https://numpy.org/) and [Pillow](https://python-pillow.org/) | Offline data-building scripts in `tools/` | BSD-3-Clause; MIT-CMU (HPND) |
 
 **Reviewed, not used:** the Mars 2020 raw-image feed (the app draws a synthetic 3D terrain view instead). The USGS geologic map is used for context only, not for routing: at 1:20,000,000 the whole Mount Sharp planning area falls in two of its units.
+
+## Rover-autonomy sandbox
+
+The route report's **Rover-autonomy sandbox** button exports the analysed real Mars terrain as one JSON file: elevation, slope, rock-density and no-go grids, the rover limits, the route AresNav planned (a baseline) and, where it crosses that ground, the path Curiosity's drivers actually took (an expert demonstration). It turns any place on Mars the app can analyse into a planning-level environment for path-planning or reinforcement-learning agents:
+
+```python
+import json, base64, numpy as np
+d = json.load(open("aresnav-sandbox-....json")); g = d["grid"]
+grid = {k: np.frombuffer(base64.b64decode(v["data"]), v["dtype"]).reshape(g["ny"], g["nx"]) for k, v in d["layers"].items()}
+```
+
+Cells are metres across, so it is for route choice, not camera-based hazard avoidance or wheel-soil physics. Inside the app, rover mode already plans within the rover's slope and rock limits and drives the route in simulation.
 
 ## Works offline
 
