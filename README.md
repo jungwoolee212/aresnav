@@ -21,7 +21,7 @@ It is built around lower Mount Sharp in Gale crater, where a prebuilt HiRISE ter
 3. **Report** lists each danger (steep climbs, rocky ground, no-go edges, terrain shadow) with its location on the map, plus the oxygen plan, elevation, sky-view shielding, sunlight, geologic units, science sites near the route, radio line of sight to base, a radiation-dose estimate, dust season and space weather, and the check against Curiosity's real path.
 4. **Checkpoints are optional.** Once a route exists, tap the map and choose *Add checkpoint here*, or use *+ Add checkpoint*. Name it, set how long you'll stop, drag it to move it.
 5. Switch between **Crew on foot** and **Rover**. Each has its own slope, rock and speed limits (Settings). For crew on foot, Settings also sets suit oxygen and the carried load (tools, samples), which change the oxygen plan.
-6. **Start** begins turn-by-turn guidance on a simulated position. **HUD** (next to Start) goes straight into the helmet display with a 3D view of the terrain ahead. Keys: Space pauses, H toggles the HUD, V talks to the voice assistant, Esc goes back.
+6. **Start** begins turn-by-turn guidance on a simulated position, played back at the **Sim speed** you pick (10× by default: 10 minutes of walking in 1 minute; 30×, 60× or 240× to skip ahead). **HUD** (next to Start) goes straight into the helmet display with a 3D view of the terrain ahead. Keys: Space pauses, H toggles the HUD, V talks to the voice assistant, Esc goes back.
 7. **Compare routes** plans the fastest, balanced and safest options side by side (time, steep ground, distance near no-go ground, average hazard) and draws them dashed on the map. *Use* switches to one.
 8. **During guidance**, *Return to start* and *Nearest shelter* re-route from your current position in one tap.
 9. **Route sheet** opens a printable summary (save as PDF from the print dialog); **GPX** downloads the track with stops and hazards as waypoints. The ⤢ button on the map zooms back to the whole route.
@@ -45,7 +45,7 @@ Rock density comes from HiRISE image texture where a HiRISE mosaic covers the gr
 
 **Refine.** The terrain line under the route summary shows the grid used. *Refine route terrain* (or Settings → Terrain detail → High) re-analyses the corridor between start and destination on a finer grid (down to 4 m), so long routes get coarser cells only where needed. `tools/build_catalog.py` rebuilds the catalog from Trek.
 
-**2D / 3D.** The 2D/3D switch on the map shows the analysed terrain as a 3D mesh with the route, markers and (during guidance) your position. Drag to rotate, scroll to zoom, click the ground to pick a point. Colours show the hazard score; if the device renders slowly, it switches to a lighter gray mesh.
+**2D / 3D.** The 2D/3D switch on the map shows the analysed terrain as a 3D mesh with the route, markers and (during guidance) your position as a small 3D model: a suited astronaut on foot, a pressurized rover when driving, facing the direction of travel. Drag to rotate, scroll to zoom, click the ground to pick a point. Colours show the hazard score (slope and rocks), with a legend: easy ground, some risk, high risk, no-go. If the device renders slowly, it switches to a lighter gray mesh.
 
 ## Voice assistant
 

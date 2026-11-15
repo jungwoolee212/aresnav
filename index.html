@@ -170,9 +170,10 @@
           <div class="nav-vitals" id="navVitals"></div>
           <div class="nav-ctrls">
             <button class="btn round" id="navPlay" title="Pause / resume (Space)" aria-label="Pause">❚❚</button>
-            <select class="btn" id="navRate" title="Simulation speed" aria-label="Simulation speed">
+            <label class="rate-wrap" title="Simulated walk playback speed: 10× plays 10 minutes of walking in 1 minute"><span class="rate-lbl">Sim speed</span>
+            <select class="btn" id="navRate" aria-label="Simulation playback speed">
               <option value="10" selected>10×</option><option value="30">30×</option><option value="60">60×</option><option value="240">240×</option>
-            </select>
+            </select></label>
             <button class="btn hudbtn" id="navHud" title="Helmet heads-up display (H)">HUD</button>
             <button class="btn exit" id="navExit" title="End navigation (Esc)">End</button>
           </div>
@@ -182,7 +183,7 @@
           <button class="btn sos" id="navShelter" title="Re-route from here to the most sheltered spot nearby">⛨ Nearest shelter</button>
         </div>
         <input type="range" id="navScrub" min="0" max="1000" value="0" aria-label="Progress along the route" />
-        <div class="sim-note">Simulated position. On Mars this would follow the suit's navigation fix (there's no GPS).</div>
+        <div class="sim-note">Simulated position, played back at the Sim speed you pick (10× = 10 minutes of walking in 1 minute). On Mars this would follow the suit's navigation fix (there's no GPS).</div>
       </div>
     </section>
 

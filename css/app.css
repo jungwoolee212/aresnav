@@ -152,6 +152,8 @@ a { color: var(--mars2); }
 .vital.warn b { color: var(--warn); } .vital.bad b { color: #ff7083; }
 .nav-ctrls { display: flex; gap: 8px; margin-left: auto; align-items: center; }
 .nav-ctrls select.btn { padding: 9px 10px; }
+.rate-wrap { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.rate-lbl { font-size: 10px; color: var(--muted); line-height: 1; white-space: nowrap; }
 #navScrub { width: 100%; margin: 8px 0 2px; accent-color: var(--ok); }
 .sim-note { font-size: 11px; color: var(--muted); }
 
