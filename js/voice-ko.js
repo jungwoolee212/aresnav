@@ -86,6 +86,7 @@ function one(s) {
 
   // ---- questions and commands that contain route-like words: settle these first ----
   if (/통신|교신|무선|신호|가시선|기지(?:랑|와|하고)\s*연결/.test(s) && !/꺼|켜/.test(s)) return "am I in radio contact with base";
+  if (/(?:동료|파트너|짝|대원|같이\s*간\s*사람).*(?:다치|부상|쓰러|못\s*걸)|(?:다치|부상).*(?:동료|파트너|짝)|로버\s*(?:가|이)?\s*(?:구조|구하러|데리러)|구조\s*(?:오|와|올)/.test(s)) return "what if my partner is hurt";
   if (/선량|피폭|방사선\s*(?:량|얼마|수치|노출)/.test(s) && !/어떡|어떻게\s*해|높으면|피해|피할|대피|숨/.test(s)) return "what is the radiation dose";
   if (/우주\s*날씨|CME|코로나\s*질량|(?:태양\s*(?:폭풍|풍)|먼지\s*폭풍)\s*(?:예보|예측|와|오나|올까|있어|있나|소식|철|시즌)|먼지\s*폭풍\s*철/.test(s) && !/대피|숨|피해|데려|가자|피할/.test(s)) return "space weather";
   if (/산소|o2|O2|오투/.test(s) && /어떻게\s*(?:계산|정해|구해|알아|나와|나오|돼)|계산|계획|기준|예상치|추정|원리|어디서\s*나와/.test(s)) return "how is oxygen calculated";
@@ -282,6 +283,8 @@ export function checkKo(t) {
   if (t === "Rock density not assessed") return "바위 밀도 미평가";
   if ((m = t.match(/^Out of radio line of sight to base for (.+) \((\d+)% of the route\)$/))) return `기지와 무선 가시선이 끊기는 구간 ${m[1]} (경로의 ${m[2]}퍼센트)`;
   if (t === "Radio line of sight to base the whole way") return "전 구간 기지와 무선 가시선 확보";
+  if (t === "Enough oxygen to help a partner back") return "동료를 도우며 돌아올 산소 충분";
+  if (t === "Not enough oxygen to help a partner back") return "동료를 도우며 돌아오기엔 산소 부족";
   if (t === "Point moved to usable ground") return "지점을 이동 가능한 땅으로 옮김";
   return t;
 }
@@ -395,6 +398,11 @@ const RULES = [
   [/^It's dust storm season on Mars \(Ls (\d+) degrees\)$/, "지금은 화성의 먼지 폭풍 철입니다(Ls $1도)"], [/^Regional dust storms are common now$/, "지역 먼지 폭풍이 잦은 시기입니다"],
   [/^It's not dust storm season on Mars \(Ls (\d+) degrees\)$/, "지금은 화성의 먼지 폭풍 철이 아닙니다(Ls $1도)"],
   [/^There's no route yet$/, "아직 경로가 없습니다"],
+  [/^If one of you is hurt, the pair walks back at (\d+) percent pace$/, "한 명이 다치면 두 사람이 $1퍼센트 속도로 돌아온다고 봅니다"],
+  [/^The lowest margin is then (.+)$/, "그때 최저 귀환 여유는 $1입니다"],
+  [/^Oxygen would run short (.+?) along: plan a shorter walk or a rover escort$/, "$1 지점에서 산소가 모자랍니다. 더 짧은 경로로 하거나 로버와 함께 가세요"],
+  [/^A rover from base reaches the farthest point in about (.+)$/, "기지의 로버가 가장 먼 지점까지 약 $1에 도착합니다"],
+  [/^You're in the rover, so the walk-back check doesn't apply$/, "로버에 타고 있어서 도보 귀환 점검은 해당되지 않습니다"],
   [/^No safe (walkable|drivable) path reaches (.+?): it's cut off by ground steeper than (\d+)(?:°| degrees)( or too rocky for the rover)?$/, (_, w, to, d, r) => `${to}까지 ${w === "drivable" ? "로버로" : "걸어서"} 갈 안전한 길이 없습니다. ${d}도보다 가파른${r ? "거나 로버에게 바위가 너무 많은" : ""} 지형에 막혀 있습니다`],
   [/^Oxygen here is a planning estimate, not a sensor reading$/, "여기 산소는 센서 값이 아니라 계획용 예상치입니다"],
   [/^The suit is rated for (.+?) hours of walking on the flat, with (.+?) hours? kept in reserve$/, "우주복 산소는 평지 보행 기준 $1시간이고, 그중 $2시간은 비상용으로 남깁니다"],

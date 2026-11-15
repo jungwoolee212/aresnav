@@ -98,6 +98,10 @@ export function stormNow(sw, now = Date.now()) {
 // Downhill is counted like the flat (Pandolf under-predicts downhill cost). Gravity scales every term alike,
 // so it cancels in the ratio.
 export const CREW_SUIT_KG = 135, REF_LOAD_KG = 10;
+// Two-person EVA: if one crew member is hurt, the pair walks back slower. Planning assumption.
+export const BUDDY_PACE = 0.6;
+// Rover rescue: a pressurized rover from base drives the route at this share of its flat speed.
+export const RESCUE_PACE = 0.6;
 const pandolf = (W, L, v, G, eta) => 1.5 * W + 2 * (W + L) * (L / W) ** 2 + eta * (W + L) * (1.5 * v * v + 0.35 * v * Math.max(0, G));
 export function effortModel(opts) {
   const W = CREW_SUIT_KG, L = Math.max(0, opts.loadKg ?? REF_LOAD_KG);

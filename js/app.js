@@ -12,7 +12,7 @@ import { renderTerrainView } from "./terrain3d.js";
 import { openHud, closeHud, hudIsOpen, updateHud } from "./hud.js";
 import { initVoice, voiceNavStart, voiceNavEnd, voiceTick, voiceToggleListen, voiceLang, voiceAsk } from "./voice.js";
 import { nameKo } from "./voice-ko.js";
-import { commsAlongRoute, walkDoseUSv, RAD_USV_PER_DAY, dustSeason, marsSpaceWeather, stormNow, BASE_ANT_M, SUIT_ANT_M, effortModel, CREW_SUIT_KG } from "./conditions.js";
+import { commsAlongRoute, walkDoseUSv, RAD_USV_PER_DAY, dustSeason, marsSpaceWeather, stormNow, BASE_ANT_M, SUIT_ANT_M, effortModel, CREW_SUIT_KG, BUDDY_PACE, RESCUE_PACE } from "./conditions.js";
 import { curiosityLegs, compareWithCuriosity, GEO_TILES, routeGeology, toGPX, download, openRouteSheet } from "./extras.js";
 import { uiKo, navKo, applyStatic } from "./ui-ko.js";
 import { inExtent, normLon, sourcesFor, sourceLabel, corridorFor, covers, buildSite, hasData } from "./terrain-live.js";
@@ -746,7 +746,12 @@ function analyse(tr) {
   // radio line of sight from the base antenna at the route start to the crew, at every sample
   const comms = commsAlongRoute(site, samples, pts[0]);
   samples.forEach((s, k) => { s.los = comms.los[k]; });
-  return { step, back, o2Out, o2Back, effAvg, effMax, samples, shelter, dangers: D, emin, emax, smax, skyAvg, shadeFrac, comms, day: daylight(today), Ls: sunAt(12, today).Ls };
+  // two-person EVA: margin if the pair has to walk back at BUDDY_PACE (one crew member hurt); rover rescue time
+  const usableS = (S.opts.plssHours - S.opts.reserveHours) * 3600;
+  let buddyMin = Infinity, buddyAt = 0;
+  for (let i = 0; i < pts.length; i++) { const m = usableS - o2Out[i] - o2Back[i] / BUDDY_PACE; if (m < buddyMin) { buddyMin = m; buddyAt = pts[i].dist; } }
+  const rescueS = tr.total.dist / ((S.opts.roverSpeed * RESCUE_PACE) / 3.6);
+  return { step, back, o2Out, o2Back, effAvg, effMax, buddyMin, buddyAt, rescueS, samples, shelter, dangers: D, emin, emax, smax, skyAvg, shadeFrac, comms, day: daylight(today), Ls: sunAt(12, today).Ls };
 }
 
 function assess(tr, A) {
@@ -760,6 +765,9 @@ function assess(tr, A) {
     C.push({ lvl, title: lvl === "bad" ? "Not enough oxygen to walk back" : lvl === "warn" ? "Oxygen is tight for the walk back" : "Enough oxygen to walk back",
       sub: `O₂ out ${dur(outO2)} + back ${dur(backO2)} = ${dur(need)} of ${dur(usable)} usable (${o.plssHours} h suit − ${o.reserveHours} h reserve). ${minM < 0 ? `Walk-back margin runs out ${distTxt(at)} along.` : `Lowest walk-back margin ${dur(minM)}.`}` });
   }
+  if (walk) C.push({ lvl: A.buddyMin < 0 ? "warn" : "ok",
+    title: A.buddyMin < 0 ? "Not enough oxygen to help a partner back" : "Enough oxygen to help a partner back",
+    sub: `If one crew member is hurt, the pair walks back at ${Math.round(BUDDY_PACE * 100)}% pace: ${A.buddyMin < 0 ? `oxygen runs short ${distTxt(A.buddyAt)} along.` : `lowest margin ${dur(A.buddyMin)}.`} A rover from base reaches the farthest point in about ${dur(A.rescueS)}.` });
   if (A.comms) {
     const cm = A.comms, out = cm.runs.reduce((s, r) => s + r.len, 0);
     C.push({ lvl: "ok", title: cm.runs.length ? `Out of radio line of sight to base for ${distTxt(out)} (${fmt((1 - cm.frac) * 100)}% of the route)` : "Radio line of sight to base the whole way",
@@ -928,6 +936,7 @@ function oxygenCard(tr, A) {
   return `<div class="card"><div class="eyebrow">${ko ? "산소 계획 · 계획용 예상치, 센서 값 아님" : "Oxygen plan · planning estimate, not a sensor reading"}</div>
     <div class="kv"><div>${ko ? "우주복 산소" : "Suit oxygen"}<b>${fmt(o.plssHours, 1)} h</b></div><div>${ko ? "예비" : "Reserve"}<b>${fmt(o.reserveHours, 1)} h</b></div><div>${ko ? "사용 가능" : "Usable"}<b>${D(usable)}</b></div></div>
     <div class="kv"><div>${ko ? "짐" : "Carried load"}<b>${fmt(o.loadKg ?? 10)} kg</b></div><div>${ko ? "평균 노력" : "Avg effort"}<b>×${fmt(A.effAvg, 2)}</b></div><div>${ko ? "최대 노력" : "Peak effort"}<b>×${fmt(A.effMax, 2)}</b></div></div>
+    <div class="kv"><div>${ko ? "2인 조 비상 귀환 여유" : "Buddy-return margin"}<b>${A.buddyMin < 0 ? "−" + D(-A.buddyMin) : D(A.buddyMin)}</b></div><div>${ko ? "로버 구조 도착" : "Rover rescue"}<b>${D(A.rescueS)}</b></div><div>${ko ? "부상 시 속도" : "Pace if hurt"}<b>${Math.round(BUDDY_PACE * 100)}%</b></div></div>
     <table class="o2-table"><thead><tr><th>${ko ? "위치" : "Where"}</th><th>${ko ? "경과" : "Time out"}</th><th>${ko ? "산소 잔량" : "O₂ left"}</th><th>${ko ? "귀환에 드는 산소" : "O₂ to walk back"}</th><th>${ko ? "귀환 여유" : "Margin"}</th></tr></thead><tbody>${rows}</tbody></table>
     <div class="strip">${strip}</div><div class="legend-row" style="justify-content:space-between"><span>${ko ? "출발" : "start"}</span><span>${ko ? "초록 = 여유 30분 이상 · 노랑 = 빠듯 · 빨강 = 부족" : "green = 30 min+ margin · yellow = tight · red = short"}</span><span>${ko ? "도착" : "end"}</span></div>
     <p class="small">${ko
@@ -1139,7 +1148,7 @@ function renderAbout() {
   $("#aboutBody").innerHTML = `
     <h3>The site</h3><p>${esc(ABOUT_SITE)} Routes can be planned anywhere on Mars. Dotted outlines mark the ${CATALOG.dems.length} regions where Trek has a sharp regional elevation model (green: HiRISE ~1 m, purple: CTX / HRSC); elsewhere only the global 200 m blend exists, which is good for reconnaissance but can't show cliffs or boulder fields. The orange dashed box is the ground analysed for the current route: ${fmt((S.site.nx * S.site.cell_m) / 1000, 1)} × ${fmt((S.site.ny * S.site.cell_m) / 1000, 1)} km on a ${fmt(S.site.cell_m)} m grid from ${S.site.live ? `${esc(sourceLabel(S.site.source))}${S.site.rock ? `, rock density from ${esc(S.site.rock.mosaic)}` : ", rock density not assessed (no HiRISE mosaic)"}` : "the prebuilt lower Mount Sharp data"}. Context: NASA's <a href="https://science.nasa.gov/resource/curiositys-proposed-path-up-mount-sharp/" target="_blank" rel="noopener">Curiosity's proposed path up Mount Sharp</a>.</p>
     <h3>Radio contact, dose, dust and space weather</h3><p><b>Radio:</b> line of sight from a 5 m base antenna at the route start to a 2 m suit antenna, over the terrain grid and the planet's curvature; relay orbiters aren't modelled. <b>Dose:</b> Curiosity RAD's ~640 µSv/day on the surface at Gale (Hassler et al. 2014), scaled by time outside and the route's average open sky; a rough estimate. <b>Dust:</b> Ls 180°–330° is dust-storm season (climatology; no public Mars dust forecast exists). <b>Space weather:</b> CMEs that NASA DONKI's WSA-ENLIL model runs predict to reach Mars, refreshed at most every 3 hours and kept for offline use.</p>
-    <h3>How oxygen is planned</h3><p>A planning estimate, not a sensor reading. The suit's rated time (Settings → Suit oxygen, default 8 h, 1 h kept in reserve) is taken to hold for walking on the flat at the planned pace; climbs, pace, carried load (Settings → Carried load) and rocky ground scale the use up or down with the Pandolf et al. 1977 load-carriage equation. At every point the time already out plus the time to walk back to the start along the same path must fit in the usable oxygen; the leftover is the walk-back margin. The route report's <b>Oxygen plan</b> shows it along the whole route, and guidance warns when the margin runs low. Real use varies with effort, slope and the suit.</p>
+    <h3>How oxygen is planned</h3><p>A planning estimate, not a sensor reading. The suit's rated time (Settings → Suit oxygen, default 8 h, 1 h kept in reserve) is taken to hold for walking on the flat at the planned pace; climbs, pace, carried load (Settings → Carried load) and rocky ground scale the use up or down with the Pandolf et al. 1977 load-carriage equation. At every point the time already out plus the time to walk back to the start along the same path must fit in the usable oxygen; the leftover is the walk-back margin. Two-person EVAs are also checked for the case where one crew member is hurt and the pair walks back at 60% pace, and the report gives how long a pressurized rover from base needs to reach the farthest point (route distance at 60% of the rover's flat speed). The route report's <b>Oxygen plan</b> shows it along the whole route, and guidance warns when the margin runs low. Real use varies with effort, slope and the suit.</p>
     <h3>How a route is planned</h3><ul>
       <li>A* search over the grid finds the quickest path, with extra cost near steep or rocky ground (the <i>route preference</i> setting).</li>
       <li>Crew on foot: no ground steeper than ${S.opts.maxSlope}°; walking speed from Tobler's hiking function, slowed by rocks.</li>

@@ -15,7 +15,7 @@ import { PLACES, SITES } from "./mission.js";
 import { PLACES_DATA } from "./places.js";
 import { inExtent } from "./terrain-live.js";
 import { hasHangul, koToEnglish, koPlace, enToKo, romanize } from "./voice-ko.js";
-import { walkDoseUSv, RAD_USV_PER_DAY, dustSeason, cachedSpaceWeather, stormNow } from "./conditions.js";
+import { walkDoseUSv, RAD_USV_PER_DAY, dustSeason, cachedSpaceWeather, stormNow, BUDDY_PACE } from "./conditions.js";
 
 const $ = (s) => document.querySelector(s);
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -653,6 +653,7 @@ async function savePlace(what, name) {
 // radio contact, radiation dose, space weather and dust (planning or guidance)
 const ASK_COMMS = /\b(radio|comms?|communication|contact with (the )?base|signal|line of sight|reach (the )?base)\b/;
 const ASK_DOSE = /\b(dose|dosage|how much radiation|radiation (level|exposure|dose))\b/;
+const ASK_BUDDY = /\b(partner|buddy|crewmate|hurt|injur|rescue|help (him|her|them) back)\b/;
 const ASK_SPACEWX = /\b(space weather|solar storm|cme|solar flare|coronal|dust storm|dust season)\b/;
 function stormSentence(s) { return `Space weather: a solar storm is predicted to reach Mars around ${new Date(s.arrival).toISOString().slice(5, 16).replace("T", " ")} UTC${s.glancing ? ", a glancing blow" : ""}. Know your nearest shelter.`; }
 function commsAnswer(Lv) {
@@ -665,6 +666,12 @@ function doseAnswer() {
   const S = C.S, A = S.ana, tr = S.track; if (!A || !tr) return "There's no route yet.";
   const secs = tr.total.time + (tr.kind === "walk" ? A.back[A.back.length - 1] : 0);
   return `Estimated radiation dose for this walk: about ${Math.round(walkDoseUSv(secs, A.skyAvg))} microsieverts. That's from Curiosity's measured ${RAD_USV_PER_DAY} microsieverts a day on open ground, scaled by how much sky the terrain leaves open. A solar particle event can raise this many times.`;
+}
+function buddyAnswer() {
+  const A = C.S.ana, tr = C.S.track; if (!A || !tr) return "There's no route yet.";
+  if (tr.kind !== "walk") return "You're in the rover, so the walk-back check doesn't apply.";
+  const pace = Math.round(BUDDY_PACE * 100);
+  return `If one of you is hurt, the pair walks back at ${pace} percent pace. ${A.buddyMin < 0 ? `Oxygen would run short ${spokenDist(A.buddyAt)} along: plan a shorter walk or a rover escort.` : `The lowest margin is then ${spokenDur(A.buddyMin)}.`} A rover from base reaches the farthest point in about ${spokenDur(A.rescueS)}.`;
 }
 function spaceWxAnswer() {
   const A = C.S.ana, sw = cachedSpaceWeather(), s = stormNow(sw), parts = [];
@@ -681,6 +688,7 @@ function o2How() {
 }
 function planAnswer(q) {
   if (O2_HOW.test(q)) return o2How();
+  if (ASK_BUDDY.test(q)) return buddyAnswer();
   if (ASK_COMMS.test(q)) return commsAnswer(null);
   if (ASK_DOSE.test(q)) return doseAnswer();
   if (ASK_SPACEWX.test(q) && !/take me|shelter|hide|cover/.test(q)) return spaceWxAnswer();
@@ -713,6 +721,7 @@ function answer(q, Lv) {
   const remain = () => Lv.done ? "You've arrived." : `${spokenDist(Lv.remainDist)} to go, about ${spokenDur(Lv.remainTime)}. You'll arrive around ${hhmm(Lv.arrive)} local time.`;
 
   if (O2_HOW.test(q)) return o2How();
+  if (ASK_BUDDY.test(q)) return buddyAnswer();
   if (ASK_COMMS.test(q)) return commsAnswer(Lv);
   if (ASK_DOSE.test(q)) return doseAnswer();
   if (ASK_SPACEWX.test(q) && !/take me|shelter|hide|cover/.test(q)) return spaceWxAnswer();
