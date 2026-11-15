@@ -67,7 +67,7 @@ const STATIC = [
   ["#navExit", "종료"], ["#navRecenter", "다시 중앙으로"], [".sim-note", "모의 위치입니다. 화성에서는 우주복의 항법 위치를 따릅니다(GPS 없음)."],
   [".empty-title", "어디로 가나요?"], ["#emptyCard p", "지도를 눌러 <b>출발지</b>를 정하고, 한 번 더 눌러 <b>목적지</b>를 정하세요. 급경사, 바위, 햇빛, 그늘, 방사선 차폐를 점검한 가장 안전한 경로를 찾아 줍니다.", true],
   ["#pickCancel", "취소"], [".m3-bar label", "높이"], ["#m3Reset", "시점 초기화"], ["#m3Color option[value=hazard]", "위험도 색상"], ["#m3Color option[value=gray]", "회색"],
-  [".m3-hint", "드래그: 회전 · 스크롤: 확대 · 오른쪽 드래그: 이동 · 땅을 클릭하면 지점 선택. 분석한 지역(2D의 주황 상자)을 보여 줍니다."], [".view-toggle #view2d", "2D"], [".view-toggle #view3d", "3D"],
+  [".m3-hint", "드래그: 회전 · 스크롤: 확대 · 오른쪽 드래그: 이동 · 땅을 클릭하면 지점 선택. 분석한 지역(2D의 주황 상자)을 보여 줍니다."], [".m3-legend", '<b>위험도: 경사 + 바위</b><span><i style="background:#a88f7a"></i>안전한 땅</span><span><i style="background:#d9c761"></i>약간 위험</span><span><i style="background:#e68c40"></i>위험: 가파르거나 바위가 많음</span><span><i style="background:#d94047"></i>진입 금지: 25° 초과, 바위 과다, 데이터 없음</span>', true], [".view-toggle #view2d", "2D"], [".view-toggle #view3d", "3D"],
 ];
 // replace the last text node (buttons also hold an icon)
 function lastText(el) { const t = [...el.childNodes].filter((n) => n.nodeType === 3 && n.textContent.trim()); return t[t.length - 1]; }

@@ -52,7 +52,10 @@
         <select id="m3Color" aria-label="Terrain colours"><option value="hazard">Hazard colours</option><option value="gray">Gray</option></select>
         <button class="btn small" id="m3Reset">Reset view</button>
       </div>
-      <div class="m3-note hidden" id="m3Note"></div>
+      <div class="m3-side">
+        <div class="m3-legend" id="m3Legend"><b>Hazard: slope + rocks</b><span><i style="background:#a88f7a"></i>Easy ground</span><span><i style="background:#d9c761"></i>Some risk</span><span><i style="background:#e68c40"></i>High risk: steep or rocky</span><span><i style="background:#d94047"></i>No-go: over 25°, too rocky or no data</span></div>
+        <div class="m3-note hidden" id="m3Note"></div>
+      </div>
       <div class="m3-hint">Drag to rotate · scroll to zoom · right-drag to pan · click the ground to pick a point. Shows the analysed area (orange box in 2D).</div>
     </div>
     <div class="view-toggle" role="group" aria-label="Map view"><button id="view2d" class="on" aria-pressed="true">2D</button><button id="view3d" aria-pressed="false">3D</button></div>

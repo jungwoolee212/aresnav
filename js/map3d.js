@@ -129,6 +129,7 @@ function colorize() {
   }
   col.needsUpdate = true;
   el.querySelector("#m3Color").value = state.color;
+  el.querySelector("#m3Legend")?.classList.toggle("hidden", gray);
 }
 
 function drawRoute() {
