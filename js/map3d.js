@@ -2,6 +2,8 @@
 // position. Loaded on first use. "Hazard" colours vertices by the planner's hazard score; "Gray" is plain
 // shaded terrain and is switched on automatically if the frame rate drops, as is a lighter mesh.
 
+import { MODE_ICON } from "./conditions.js";
+
 const THREE_URL = "three";   // resolved by the import map in index.html (three@0.160.0 on jsDelivr)
 const CONTROLS_URL = "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js";
 const DEG = Math.PI / 180;
@@ -155,14 +157,21 @@ function drawMarkers() {
     stem.position.set(x, y + size * 0.8, z); markers.add(stem);
   }
 }
-export function updatePosition(lat, lon) {
+export function updatePosition(lat, lon, mode = "walk") {
   if (!visible || !state.site) return;
   const site = state.site, size = Math.max(4, state.vis * 0.45);
-  if (!meObj) { meObj = new T.Mesh(new T.SphereGeometry(1, 16, 12), new T.MeshBasicMaterial({ color: 0x4aa3ff })); scene.add(meObj); }
-  meObj.scale.setScalar(size);
-  const [x, z] = toXZ(site, lat, lon); meObj.position.set(x, heightAt(site, lat, lon) + size * 1.5, z);
+  if (meObj && meObj.userData.mode !== mode) clearPosition();
+  if (!meObj) {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="-5 -5 34 34"><circle cx="12" cy="12" r="15" fill="#4aa3ff" stroke="#fff" stroke-width="2.5"/><g fill="#fff">${MODE_ICON[mode] || MODE_ICON.walk}</g></svg>`;
+    const tex = new T.TextureLoader().load("data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg));
+    tex.colorSpace = T.SRGBColorSpace;
+    meObj = new T.Sprite(new T.SpriteMaterial({ map: tex, depthTest: false, transparent: true, sizeAttenuation: false }));
+    meObj.renderOrder = 10; meObj.userData.mode = mode; scene.add(meObj);
+  }
+  meObj.scale.setScalar(0.075);   // fixed on-screen size (fraction of the view height)
+  const [x, z] = toXZ(site, lat, lon); meObj.position.set(x, heightAt(site, lat, lon) + size * 1.8, z);
 }
-export function clearPosition() { if (meObj) { scene.remove(meObj); meObj = null; } }
+export function clearPosition() { if (meObj) { scene.remove(meObj); meObj.material.map?.dispose(); meObj.material.dispose(); meObj = null; } }
 
 function frame() {
   const site = state.site; if (!site) return;
