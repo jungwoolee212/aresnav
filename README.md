@@ -10,7 +10,7 @@
 
 Screenshots are of the live app (not AI-generated).
 
-**NASA Space Apps Challenge 2026.** A navigation app for crew on foot or in a pressurized rover on Mars. Pick a start and a destination; it plans the safest route and checks it for dangers, elevation, sunlight and radiation shielding. Then it guides you turn by turn on a map, in a helmet HUD or by voice (English or Korean).
+**NASA Space Apps Challenge 2026.** A navigation app for crew on foot or in a pressurized rover on Mars. Pick a start and a destination; it plans the safest route and checks it: oxygen to walk back (with effort, carried load and an injured partner taken into account), steep and rocky ground, sunlight, radio line of sight to base, radiation and space weather. It can add Curiosity science sites as timed stops. Then it guides you turn by turn on a map, in a helmet HUD or by voice (English or Korean), and key routes keep working with no network.
 
 It is built around lower Mount Sharp in Gale crater, where a prebuilt HiRISE terrain grid gives EVA-grade results. You can plan anywhere else on Mars too: the app uses the sharpest NASA Mars Trek elevation model for that ground, and routes planned only on coarse global terrain are flagged as a rough guide (small cliffs and rocks don't show at that scale), never "safe to go".
 
@@ -18,13 +18,16 @@ It is built around lower Mount Sharp in Gale crater, where a prebuilt HiRISE ter
 
 1. On first open an **example route** is already planned. Press *Start* to try guidance, or tap the map to set your own start, then tap again for your destination.
 2. Read the result: travel time, distance, arrival time (Mars local time) and a safety status. Expand it to see every check.
-3. **Report** lists each danger (steep climbs, rocky ground, no-go edges, terrain shadow) with its location on the map, plus elevation, sky-view shielding and sunlight.
+3. **Report** lists each danger (steep climbs, rocky ground, no-go edges, terrain shadow) with its location on the map, plus the oxygen plan, elevation, sky-view shielding, sunlight, geologic units, science sites near the route, radio line of sight to base, a radiation-dose estimate, dust season and space weather, and the check against Curiosity's real path.
 4. **Checkpoints are optional.** Once a route exists, tap the map and choose *Add checkpoint here*, or use *+ Add checkpoint*. Name it, set how long you'll stop, drag it to move it.
-5. Switch between **Crew on foot** and **Rover**. Each has its own slope, rock and speed limits (Settings).
+5. Switch between **Crew on foot** and **Rover**. Each has its own slope, rock and speed limits (Settings). For crew on foot, Settings also sets suit oxygen and the carried load (tools, samples), which change the oxygen plan.
 6. **Start** begins turn-by-turn guidance on a simulated position. **HUD** (next to Start) goes straight into the helmet display with a 3D view of the terrain ahead. Keys: Space pauses, H toggles the HUD, V talks to the voice assistant, Esc goes back.
 7. **Compare routes** plans the fastest, balanced and safest options side by side (time, steep ground, distance near no-go ground, average hazard) and draws them dashed on the map. *Use* switches to one.
 8. **During guidance**, *Return to start* and *Nearest shelter* re-route from your current position in one tap.
 9. **Route sheet** opens a printable summary (save as PDF from the print dialog); **GPX** downloads the track with stops and hazards as waypoints. The ⤢ button on the map zooms back to the whole route.
+10. **Science along the way** (Report) lists Curiosity science sites within 3 km of the route. *Add as a science stop* re-plans with the time on site, so the oxygen, daylight and walk-back checks include it.
+11. **Offline routes** (Layers): press *Save all for offline* while connected; the four saved routes then plan and guide with no network (see Works offline).
+12. **Rover-autonomy sandbox** (Report) downloads the analysed terrain and routes as JSON for path-planning research (see Rover-autonomy sandbox).
 
 ## Where you can plan
 
@@ -105,13 +108,15 @@ Results on 14 Nov 2026, all 12 stretches planned as safe:
 
 On average the planned route stays within 50 m of Curiosity's path for 66% of its length; the median of the median gaps is 33 m. The planner's routes are usually shorter: Curiosity's drivers also detoured to science targets and used sub-metre images, so a perfect match isn't expected. Gaps under ~30 m are within the precision of the traverse line.
 
-## Data (NASA Mars Trek and USGS)
+## Data (NASA Mars Trek, USGS, Curiosity RAD and NASA DONKI)
 
 - MRO HiRISE mosaic of Curiosity's roving site and the HiRISE Gale crater DEM: processed into `data/` by `tools/build_site_data.py`.
 - Map layers: HiRISE, CTX, Viking (MDIM 2.1, made by USGS Astrogeology), MOLA, THEMIS day/night IR, TES thermal inertia, clay/glass and plagioclase.
 - USGS global geologic map of Mars (Tanaka et al. 2014, SIM 3292), served by Trek: a map layer, and the report names the units a route crosses. At 1:20,000,000 it's regional context, not used for routing.
 - Curiosity's traverse and waypoints (Trek): used to check the planner, see above.
 - Site context: NASA's *Curiosity's proposed path up Mount Sharp*.
+- Curiosity RAD's measured surface dose rate at Gale, ~640 µSv/day (Hassler et al. 2014): the base of the radiation-dose estimate.
+- NASA DONKI (Space Weather Database Of Notifications, Knowledge, Information), via api.nasa.gov: WSA-ENLIL model runs that predict solar storms (CMEs) reaching Mars. Fetched at most every 3 hours and kept for offline use.
 
 **Elevation scale.** Trek serves the DEM as 8-bit tiles. Heights use `metres = 17.97 × DN − 4569.2`, fitted once against Curiosity's published elevations (RMS 4.6 m). This is disclosed in the app's Data panel. Slopes, shadows and shielding don't depend on it.
 
@@ -148,9 +153,18 @@ Every outside source the app uses, where it's used, and its licence or credit li
 | MGS MOLA + Mars Express HRSC blended global DEM, via Trek (NASA/JPL/GSFC, ESA/DLR/FU Berlin) | Terrain everywhere outside regional models (~200 m, rough guide only) | Credit: NASA/JPL/GSFC; HRSC: ESA/DLR/FU Berlin, CC BY-SA 3.0 IGO (attribution, share-alike for derived data) |
 | Viking, THEMIS day/night IR, TES thermal inertia, clay/glass and plagioclase layers, via Trek | Optional map layers | Credit as listed in Trek's layer metadata |
 | [USGS global geologic map of Mars](https://pubs.usgs.gov/publication/sim3292) (Tanaka et al. 2014, SIM 3292), via Trek's map service | Geologic map layer; geologic units named in the route report | USGS public domain; credit: USGS |
-| Curiosity traverse line and waypoints, via Trek | Checking planned routes against Curiosity's real path (`js/extras.js`) | NASA data |
+| Curiosity traverse line and waypoints, via Trek | Checking planned routes against Curiosity's real path (`js/extras.js`); science stops (`js/science.js`); sandbox expert path (`js/sandbox.js`) | NASA data |
+| [NASA DONKI](https://kauai.ccmc.gsfc.nasa.gov/DONKI/) WSA-ENLIL simulations, via [api.nasa.gov](https://api.nasa.gov/) | Solar storms predicted to reach Mars (`js/conditions.js`) | NASA open API (public `DEMO_KEY`) |
 | IAU planetary feature names (IAU WGPSN), via Trek's search index | Searchable and spoken place names | Public nomenclature |
 | [Curiosity's proposed path up Mount Sharp](https://science.nasa.gov/resource/curiositys-proposed-path-up-mount-sharp/) (NASA/JPL-Caltech/Univ. of Arizona) | Site context in the Data panel | NASA image, credited |
+
+**Published methods**
+
+| Source | Used for |
+|---|---|
+| Hassler, D. M. et al. (2014), Mars' surface radiation environment measured with the Mars Science Laboratory's Curiosity rover, *Science* 343, 1244797 | Surface dose rate for the radiation-dose estimate |
+| Pandolf, K. B., Givoni, B. & Goldman, R. F. (1977), Predicting energy expenditure with loads while standing or walking very slowly, *J. Appl. Physiol.* 43, 577–581 | Effort model behind the oxygen plan |
+| Allison, M. & McEwen, M. (2000), A post-Pathfinder evaluation of areocentric solar coordinates, *Planet. Space Sci.* 48, 215–235 (the algorithm of NASA GISS Mars24) | Sun position and Mars local time (`js/sun.js`) |
 
 **Software and fonts**
 
@@ -194,7 +208,7 @@ Tested by planning online, then shutting the web server down and blocking every 
 
 ## Limits
 
-Planning aid for a concept study. Features smaller than a few metres aren't in the slope grid. Position during navigation is simulated. Walking speed, suit duration and rover limits are adjustable assumptions.
+Planning aid for a concept study. Features smaller than a few metres aren't in the slope grid. Position during navigation is simulated. Walking speed, suit duration, carried load and rover limits are adjustable assumptions. Oxygen use and radiation dose are planning estimates, not sensor readings. The radio check covers a direct line to a base antenna only (no relay orbiters), and dust season is climatology, not a forecast.
 
 ## License
 
