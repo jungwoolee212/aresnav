@@ -108,9 +108,3 @@ export function effortModel(opts) {
   const ref = pandolf(W, REF_LOAD_KG, opts.flatSpeed / 3.6, 0, 1.2);
   return (grade, v, rough = 0) => pandolf(W, L, Math.max(0, v), grade * 100, 1.1 + 0.6 * Math.min(1, Math.max(0, rough))) / ref;
 }
-
-// Moving-marker icons (24x24, drawn white on the blue disc): a suited astronaut or a pressurized rover.
-export const MODE_ICON = {
-  walk: '<circle cx="12" cy="6" r="4.4"/><rect x="9.2" y="4.3" width="5.6" height="3.1" rx="1.5" fill="#1f6fc4"/><rect x="5.2" y="10" width="3.2" height="6.2" rx="1"/><rect x="8.6" y="10" width="7" height="7.2" rx="2"/><rect x="15.8" y="10.6" width="2.3" height="5.2" rx="1.1"/><rect x="9" y="16.6" width="2.7" height="5.6" rx="1.1"/><rect x="12.5" y="16.6" width="2.7" height="5.6" rx="1.1"/>',
-  drive: '<rect x="3.5" y="8.5" width="17" height="6.5" rx="1.6"/><rect x="15.2" y="4.6" width="1.6" height="4"/><rect x="13.6" y="3" width="4.8" height="2.2" rx=".6"/><circle cx="6.5" cy="18" r="2.4"/><circle cx="12" cy="18" r="2.4"/><circle cx="17.5" cy="18" r="2.4"/>',
-};

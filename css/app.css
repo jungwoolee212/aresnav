@@ -121,10 +121,7 @@ a { color: var(--mars2); }
 .pin-start { background: var(--ok); }
 .pin-end { background: var(--bad); }
 .pin-cp { background: var(--mars); display: grid; place-items: center; font: 700 11px var(--mono); color: #fff; border-width: 2px; }
-.me-marker { position: relative; }
-.me-marker .me-dir { position: absolute; inset: 0; transform-origin: 50% 50%; }
-.me-marker .me-dir svg { display: block; }
-.me-marker .me-icon { position: absolute; left: 5px; top: 5px; filter: drop-shadow(0 0 6px rgba(74,163,255,.9)); }
+.me-marker svg { filter: drop-shadow(0 0 6px rgba(74,163,255,.9)); }
 .danger-pin { width: 18px; height: 18px; border-radius: 50%; background: #f5c84b; color: #1b0d05; font: 800 12px var(--mono); display: grid; place-items: center; border: 2px solid #1b0d05; }
 .danger-pin.bad { background: #ff7083; }
 .shelter-pin { width: 20px; height: 20px; border-radius: 6px; background: #4aa3ff; color: #fff; font: 800 12px var(--mono); display: grid; place-items: center; border: 2px solid #fff; }

@@ -2,8 +2,6 @@
 // position. Loaded on first use. "Hazard" colours vertices by the planner's hazard score; "Gray" is plain
 // shaded terrain and is switched on automatically if the frame rate drops, as is a lighter mesh.
 
-import { MODE_ICON } from "./conditions.js";
-
 const THREE_URL = "three";   // resolved by the import map in index.html (three@0.160.0 on jsDelivr)
 const CONTROLS_URL = "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js";
 const DEG = Math.PI / 180;
@@ -158,21 +156,52 @@ function drawMarkers() {
     stem.position.set(x, y + size * 0.8, z); markers.add(stem);
   }
 }
-export function updatePosition(lat, lon, mode = "walk") {
+// Your position in 3D: a small model of a suited astronaut (on foot) or a pressurized rover (driving), facing the
+// direction of travel. Model units: about 1 = its height; it is rescaled every frame to stay readable at any zoom.
+function part(geo, color, x, y, z) { const m = new T.Mesh(geo, new T.MeshLambertMaterial({ color })); m.position.set(x, y, z); return m; }
+function astronaut() {
+  const g = new T.Group(), suit = 0xf1f1ee, B = (w, h, d) => new T.BoxGeometry(w, h, d);
+  g.add(part(B(0.13, 0.42, 0.16), suit, -0.09, 0.21, 0), part(B(0.13, 0.42, 0.16), suit, 0.09, 0.21, 0));   // legs
+  g.add(part(B(0.38, 0.4, 0.26), suit, 0, 0.62, 0));                                                          // torso
+  g.add(part(B(0.32, 0.38, 0.16), 0xcfd3d8, 0, 0.64, 0.2));                                                   // life-support pack (behind)
+  g.add(part(B(0.1, 0.38, 0.13), suit, -0.25, 0.6, 0), part(B(0.1, 0.38, 0.13), suit, 0.25, 0.6, 0));        // arms
+  g.add(part(new T.SphereGeometry(0.17, 20, 14), suit, 0, 0.98, 0));                                          // helmet
+  const visor = part(new T.SphereGeometry(0.13, 20, 14), 0xe0a83a, 0, 0.99, -0.08); visor.scale.z = 0.6; g.add(visor);
+  g.add(part(B(0.2, 0.07, 0.02), 0x4aa3ff, 0, 0.72, -0.14));                                                 // chest display
+  return g;
+}
+function rover() {
+  const g = new T.Group(), B = (w, h, d) => new T.BoxGeometry(w, h, d);
+  g.add(part(B(0.7, 0.34, 1.15), 0xeeeeea, 0, 0.42, 0));                                                     // pressurized cabin
+  g.add(part(B(0.62, 0.16, 0.06), 0x24476f, 0, 0.5, -0.58));                                                 // front windows
+  g.add(part(B(0.74, 0.03, 0.5), 0x1f3a66, 0, 0.61, 0.26));                                                  // solar panel
+  g.add(part(new T.CylinderGeometry(0.025, 0.025, 0.3, 8), 0xbbbbbb, 0.22, 0.77, -0.2));                     // mast
+  g.add(part(B(0.16, 0.08, 0.08), 0xdddddd, 0.22, 0.94, -0.2));                                              // camera head
+  const wheel = new T.CylinderGeometry(0.15, 0.15, 0.11, 16);
+  for (const x of [-0.4, 0.4]) for (const z of [-0.4, 0, 0.4]) { const w = part(wheel, 0x2f2f2f, x, 0.15, z); w.rotation.z = Math.PI / 2; g.add(w); }
+  return g;
+}
+export function updatePosition(lat, lon, mode = "walk", heading = 0) {
   if (!visible || !state.site) return;
-  const site = state.site, size = Math.max(4, state.vis * 0.45);
+  const site = state.site;
   if (meObj && meObj.userData.mode !== mode) clearPosition();
   if (!meObj) {
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="-5 -5 34 34"><circle cx="12" cy="12" r="15" fill="#4aa3ff" stroke="#fff" stroke-width="2.5"/><g fill="#fff">${MODE_ICON[mode] || MODE_ICON.walk}</g></svg>`;
-    const tex = new T.TextureLoader().load("data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg));
-    tex.colorSpace = T.SRGBColorSpace;
-    meObj = new T.Sprite(new T.SpriteMaterial({ map: tex, depthTest: false, transparent: true, sizeAttenuation: false }));
-    meObj.renderOrder = 10; meObj.userData.mode = mode; scene.add(meObj);
+    meObj = new T.Group(); meObj.userData.mode = mode;
+    meObj.add(mode === "drive" ? rover() : astronaut());
+    const halo = new T.Mesh(new T.CircleGeometry(mode === "drive" ? 0.85 : 0.45, 32), new T.MeshBasicMaterial({ color: 0x4aa3ff, transparent: true, opacity: 0.55 }));
+    halo.rotation.x = -Math.PI / 2; halo.position.y = 0.01; meObj.add(halo);   // blue disc on the ground so it's easy to spot
+    scene.add(meObj);
   }
-  meObj.scale.setScalar(0.075);   // fixed on-screen size (fraction of the view height)
-  const [x, z] = toXZ(site, lat, lon); meObj.position.set(x, heightAt(site, lat, lon) + size * 1.8, z);
+  const [x, z] = toXZ(site, lat, lon); meObj.position.set(x, heightAt(site, lat, lon), z);
+  meObj.rotation.y = -heading * DEG;   // heading: degrees clockwise from north; north is -z, the models face -z
+  scaleMe();
 }
-export function clearPosition() { if (meObj) { scene.remove(meObj); meObj.material.map?.dispose(); meObj.material.dispose(); meObj = null; } }
+function scaleMe() {   // keep the model about 7% of the view height, whatever the zoom
+  if (!meObj || !camera) return;
+  const d = camera.position.distanceTo(meObj.position);
+  meObj.scale.setScalar(Math.max(1, d * 2 * Math.tan((camera.fov * DEG) / 2) * 0.07));
+}
+export function clearPosition() { if (meObj) { scene.remove(meObj); meObj.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); }); meObj = null; } }
 
 function frame() {
   const site = state.site; if (!site) return;
@@ -196,6 +225,7 @@ function loop() {
   if (!visible) return;
   raf = requestAnimationFrame(loop);
   controls.update();
+  scaleMe();
   renderer.render(scene, camera);
   // fall back to the lite gray mode if this device can't keep ~25 fps
   frames++;

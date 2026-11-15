@@ -14,7 +14,7 @@ import { initVoice, voiceNavStart, voiceNavEnd, voiceTick, voiceToggleListen, vo
 import { nameKo } from "./voice-ko.js";
 import { SCIENCE_SITES, OBJECTIVES } from "./science.js";
 import { sandboxExport } from "./sandbox.js";
-import { commsAlongRoute, walkDoseUSv, RAD_USV_PER_DAY, dustSeason, marsSpaceWeather, stormNow, BASE_ANT_M, SUIT_ANT_M, effortModel, CREW_SUIT_KG, BUDDY_PACE, RESCUE_PACE, MODE_ICON } from "./conditions.js";
+import { commsAlongRoute, walkDoseUSv, RAD_USV_PER_DAY, dustSeason, marsSpaceWeather, stormNow, BASE_ANT_M, SUIT_ANT_M, effortModel, CREW_SUIT_KG, BUDDY_PACE, RESCUE_PACE } from "./conditions.js";
 import { curiosityLegs, compareWithCuriosity, GEO_TILES, routeGeology, toGPX, download, openRouteSheet } from "./extras.js";
 import { uiKo, navKo, applyStatic } from "./ui-ko.js";
 import { inExtent, normLon, sourcesFor, sourceLabel, corridorFor, covers, buildSite, hasData } from "./terrain-live.js";
@@ -1278,7 +1278,7 @@ function startNav(intro) {
   $("#planView").classList.add("hidden"); $("#navView").classList.remove("hidden");
   $(".map-legend").classList.add("hidden");
   renderMarkers();
-  meMarker = L.marker([S.start.lat, S.start.lon], { icon: L.divIcon({ className: "me-marker", html: `<div class="me-dir"><svg width="44" height="44" viewBox="0 0 44 44"><path d="M22 1 27 8H17z" fill="#4aa3ff" stroke="#fff" stroke-width="1.5"/></svg></div><svg class="me-icon" width="34" height="34" viewBox="-5 -5 34 34"><circle cx="12" cy="12" r="15" fill="#4aa3ff" stroke="#fff" stroke-width="3"/><g fill="#fff">${MODE_ICON[S.mode] || MODE_ICON.walk}</g></svg>`, iconSize: [44, 44], iconAnchor: [22, 22] }), zIndexOffset: 2000, interactive: false }).addTo(map);
+  meMarker = L.marker([S.start.lat, S.start.lon], { icon: L.divIcon({ className: "me-marker", html: '<svg width="30" height="30" viewBox="0 0 30 30"><circle cx="15" cy="15" r="13" fill="#4aa3ff" stroke="#fff" stroke-width="3"/><path d="M15 6 21 21 15 18 9 21z" fill="#fff"/></svg>', iconSize: [30, 30] }), zIndexOffset: 2000, interactive: false }).addTo(map);
   map.setView([S.start.lat, S.start.lon], 17.5);
   document.body.classList.add("navigating");
   $("#navScrub").value = 0;
@@ -1308,11 +1308,11 @@ function navLoop(ts) {
   if (NAV.playing) { NAV.t = Math.min(total, NAV.t + dt * NAV.rate); if (NAV.t >= total) setPlaying(false); }
   const Lv = live(NAV.t);
   meMarker.setLatLng([Lv.st.lat, Lv.st.lon]);
-  const dir = meMarker.getElement()?.querySelector(".me-dir"); if (dir) dir.style.transform = `rotate(${Lv.st.heading}deg)`;
+  const svg = meMarker.getElement()?.querySelector("svg"); if (svg) svg.style.transform = `rotate(${Lv.st.heading}deg)`;
   if (NAV.follow) map.setView([Lv.st.lat, Lv.st.lon], map.getZoom(), { animate: false });
   if (ts - NAV.lastDom > 100) { NAV.lastDom = ts; renderNav(Lv); }
   if (hudIsOpen()) updateHud(Lv);
-  if (is3dOpen()) pos3d(Lv.st.lat, Lv.st.lon, S.mode);
+  if (is3dOpen()) pos3d(Lv.st.lat, Lv.st.lon, S.mode, Lv.st.heading);
   voiceTick(Lv);
   requestAnimationFrame(navLoop);
 }
